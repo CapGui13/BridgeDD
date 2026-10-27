@@ -184,14 +184,15 @@ async function readFFB(source,headers){
   setStatus(inferredFast?.completed
    ?"Main reconstituée par élimination."
    :"52 cartes reconnues.");
-  return specialized.hands;
+  return {hands:specialized.hands,requiresReview:false,reason:""};
  }
  setStatus("Deuxième lecture des cartes pour vérifier les cas difficiles…");
  try { await addScript(); }
  catch(err){
   if(specialized?.readCount===16){
    setStatus("Lecture partielle : vérifie et complète les cartes.");
-   return specialized.hands;
+   return {hands:specialized.hands,requiresReview:true,reason:
+    "Lecture incertaine : vérifie la donne avant de poursuivre."};
   }
   throw err;
  }
@@ -231,12 +232,13 @@ async function readFFB(source,headers){
  } catch(err){
   if(specialized?.readCount===16){
    setStatus("Reconnaissance partielle : corrige les cartes non reconnues.");
-   return specialized.hands;
+   return {hands:specialized.hands,requiresReview:true,reason:
+    "La vérification OCR a échoué : confirme la donne avant de poursuivre."};
   }
   throw err;
  } finally {if(worker)await worker.terminate();}
  const generic=P.validate(newHands);
- if(!specialized)return newHands;
+ if(!specialized)return {hands:newHands,requiresReview:false,reason:""};
  const fast= specializedCheck;
  // Ne pas préférer une seconde lecture qui perd des cartes ou introduit
  // des doublons. Toutes les erreurs restent vérifiables dans le formulaire.
@@ -246,8 +248,19 @@ async function readFFB(source,headers){
    6*v.duplicates.length-3*v.unknown.length-
    Math.max(0,v.missing.length-2);
  };
- return score(fast,specialized.hands)>score(generic,newHands)
-  ?specialized.hands:newHands;
+ const useFast=score(fast,specialized.hands)>score(generic,newHands);
+ const chosen=useFast?specialized.hands:newHands;
+ const fastValid=fast.complete||inferredFast?.completed;
+ const genericValid=generic.complete||P.completeFourthHand(newHands).completed;
+ const disagree=fastValid&&genericValid&&P.suits.some(suit=>
+  P.seats.some(seat=>P.normalize(specialized.hands[seat][suit]).value!==
+                       P.normalize(newHands[seat][suit]).value));
+ const requiresReview=!!disagree||(useFast&&specialized.uncertain>3);
+ return {hands:chosen,requiresReview,reason:disagree
+  ?"Les deux lectures OCR diffèrent : vérifie les cartes avant de poursuivre."
+  :(requiresReview
+    ?"Reconnaissance incertaine : vérifie les cartes avant de poursuivre."
+    :"")};
 }
 async function handleFile(file) {
  if(!file||busy)return;
@@ -270,7 +283,8 @@ async function handleFile(file) {
   imageUrl=URL.createObjectURL(file);
   $("ffb-preview-image").src=imageUrl;
   $("ffb-image-details").hidden=false;
-  hands=await readFFB(canvas,headers);
+  const reading=await readFFB(canvas,headers);
+  hands=reading.hands;
   const inferred=P.completeFourthHand(hands);
   if(inferred.completed){
    hands=inferred.hands;
@@ -280,8 +294,10 @@ async function handleFile(file) {
   // Une donne strictement complète (13 par main, 52 cartes différentes,
   // sans caractère inconnu) se charge sans confirmation supplémentaire.
   // Dans tous les autres cas, conserver l'écran de correction.
-  importAutomatically=P.validate(hands).complete;
-  if(!importAutomatically){
+  importAutomatically=P.validate(hands).complete&&!reading.requiresReview;
+  if(reading.requiresReview){
+   setStatus(reading.reason||"Vérifie les cartes avant de charger la donne.");
+  }else if(!importAutomatically){
    setStatus("Reconnaissance partielle : corrige les cartes avant de charger la donne.");
   }
  }catch(err){
