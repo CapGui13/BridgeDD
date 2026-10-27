@@ -2,8 +2,8 @@ const test=require("node:test"), assert=require("node:assert/strict");
 const fs=require("node:fs");
 test("PWA manifest installed under BridgeDD with standalone scope",()=>{
  const m=JSON.parse(fs.readFileSync("docs/manifest.webmanifest","utf8"));
- assert.equal(m.start_url,"/docs/");
- assert.equal(m.scope,"/docs/");
+ assert.equal(m.start_url,"/BridgeDD/");
+ assert.equal(m.scope,"/BridgeDD/");
  assert.equal(m.display,"standalone");
  assert.equal(m.short_name,"Bridge DD");
  assert.ok(m.icons.some(x=>x.sizes==="192x192"&&x.type==="image/png"));
