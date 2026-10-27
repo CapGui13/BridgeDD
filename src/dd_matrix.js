@@ -64,6 +64,9 @@ function init(){
   </div>
   <p class="bridge-dd-subtitle">Tableau des contrats réalisables · style Bridgemate</p>
   <p id="bridge-dd-status" class="bridge-dd-status" role="status"></p>
+  <div id="bridge-dd-retry-wrap" hidden>
+   <button id="bridge-dd-retry" type="button">Relancer le calcul DDS</button>
+  </div>
   <div id="bridge-dd-table-slot"></div>
   <p id="bridge-dd-explanation" class="bridge-dd-explanation">
    Chaque case indique le plus haut contrat réalisable. Tous les contrats
@@ -78,7 +81,9 @@ function init(){
  const status=document.getElementById("bridge-dd-status");
  const slot=document.getElementById("bridge-dd-table-slot");
  const fmt=document.getElementById("bridge-dd-format");
- let showTricks=false, lastModel=null,restore=null,scheduled=false;
+ const retryWrap=document.getElementById("bridge-dd-retry-wrap");
+ const retryButton=document.getElementById("bridge-dd-retry");
+ let showTricks=false,lastModel=null,restore=null,scheduled=false,openedAt=0;
  function currentMatrix(){
   const table=document.getElementById("result-table");
   const hands=typeof root.collectHands==="function"?root.collectHands():null;
@@ -91,10 +96,19 @@ function init(){
   lastModel=currentMatrix();
   slot.replaceChildren();
   if(!lastModel){
-   status.textContent="Calcul DDS en cours…";
+   const native=document.getElementById("result")?.textContent||"";
+   const problem=root.BridgeSolveHealth?.classifyNativeStatus(native);
+   const overdue=!!openedAt&&Date.now()-openedAt>25000;
+   status.textContent=problem
+    ?"Calcul DDS impossible : "+problem
+    :(overdue
+      ?"Le calcul dure anormalement longtemps. Tu peux le relancer."
+      :"Calcul DDS en cours…");
+   retryWrap.hidden=!problem&&!overdue;
    fmt.disabled=true;
    return;
   }
+  retryWrap.hidden=true;
   status.textContent="";
   fmt.disabled=false;
   fmt.textContent=showTricks?"Afficher les contrats":"Afficher les levées";
@@ -149,12 +163,28 @@ function init(){
   dialog.hidden=false;
   document.body.classList.add("bridge-dd-open");
   showTricks=false;
+  openedAt=Date.now();
   render();
   document.getElementById("bridge-dd-close").focus();
   if(!lastModel&&typeof root.scheduleDealSolve==="function")
    void root.scheduleDealSolve();
  });
  fmt.addEventListener("click",()=>{showTricks=!showTricks;render();});
+ retryButton.addEventListener("click",()=>{
+  openedAt=Date.now();
+  retryWrap.hidden=true;
+  status.textContent="Nouveau calcul DDS…";
+  if(typeof root.scheduleDealSolve==="function")
+   Promise.resolve(root.scheduleDealSolve()).catch(err=>{
+    status.textContent="Erreur DDS : "+String(err?.message||err);
+    retryWrap.hidden=false;
+   });
+  else{
+   status.textContent="Le moteur DDS n'est pas disponible. Recharge Bridge DD.";
+   retryWrap.hidden=false;
+  }
+ });
+ setInterval(()=>{if(!dialog.hidden&&!lastModel)render();},2000);
  document.getElementById("bridge-dd-close").addEventListener("click",close);
  dialog.querySelector(".bridge-dd-scrim").addEventListener("click",close);
  document.addEventListener("keydown",event=>{
