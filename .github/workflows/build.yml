@@ -33,7 +33,7 @@ jobs:
           # Dedicated iPhone home-screen icon and standard web app sizes.
           python3 -m venv /tmp/bridge-dd-icon-env
           /tmp/bridge-dd-icon-env/bin/pip install --quiet 'Pillow>=11,<13'
-          /tmp/bridge-dd-icon-env/bin/python src/make_pwa_icons.py BridgeDD
+          /tmp/bridge-dd-icon-env/bin/python src/make_pwa_icons.py docs
           test -s docs/apple-touch-icon.png
           test -s docs/icon-192.png
           test -s docs/icon-512.png

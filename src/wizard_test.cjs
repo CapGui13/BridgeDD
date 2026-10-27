@@ -1,7 +1,7 @@
 const fs=require("node:fs"); const assert=require("node:assert/strict");
-const coach=fs.readFileSync("BridgeDD-source/coach.js","utf8");
-const ffb=fs.readFileSync("BridgeDD-source/ffb_import.js","utf8");
-const css=fs.readFileSync("BridgeDD-source/coach.css","utf8");
+const coach=fs.readFileSync("src/coach.js","utf8");
+const ffb=fs.readFileSync("src/ffb_import.js","utf8");
+const css=fs.readFileSync("src/coach.css","utf8");
 assert.ok(coach.includes('setStage("photo");'),"First screen is photo");
 assert.ok(coach.includes('window.addEventListener("bridge:deal-imported"'),"Import transitions to contract");
 assert.ok(coach.includes('setStage("contract");'),"Contract step exists");
