@@ -221,6 +221,10 @@
         <span id="coach-color-progress"></span>
       </div>
       <p id="coach-step" class="coach-hint"></p>
+      <div id="bridge-solve-alert" hidden role="alert">
+        <span id="bridge-solve-message"></span>
+        <div><button id="bridge-solve-retry" type="button">Réessayer le calcul</button></div>
+      </div>
       <div id="coach-verdict" class="coach-verdict neutral" aria-live="polite">Calcul du meilleur jeu…</div>
       <p id="coach-progress" class="coach-hint"></p>
     </section>`;
