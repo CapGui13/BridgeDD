@@ -62,3 +62,11 @@ body.bridge-dd-open{overflow:hidden}
  .bridge-dd-matrix th,.bridge-dd-matrix td{font-size:15px;padding:10px 1px}
  .bridge-dd-matrix tbody th{font-size:11px}
 }
+
+#bridge-dd-retry-wrap[hidden]{display:none!important}
+#bridge-dd-retry-wrap{margin:6px 0 11px}
+#bridge-dd-retry{
+ border:1px solid #bfa091;border-radius:9px;
+ background:#fff1ec;color:#842f24;
+ padding:8px 11px;min-height:36px;font-weight:650;
+}
