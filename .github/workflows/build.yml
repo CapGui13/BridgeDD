@@ -92,6 +92,23 @@ jobs:
           fs.writeFileSync('/tmp/bridge-dd.wasm', Buffer.from(bin));
           JS
           node /tmp/bridge-dds/web/tests/dds_web_wasm_node.mjs "$PWD/docs/dds_web_wasm.js" /tmp/bridge-dd.wasm
+
+          # Test de bout en bout : Chromium + vrai moteur DDS + 52 cartes.
+          npm install --prefix /tmp/bridge-browser --no-audit --no-fund --no-save --silent playwright@1.57.0
+          BROWSER_BIN="$(command -v google-chrome || command -v chromium || true)"
+          if [ -z "$BROWSER_BIN" ]; then
+            /tmp/bridge-browser/node_modules/.bin/playwright install chromium
+          fi
+          python3 -m http.server 8766 --bind 127.0.0.1 --directory docs >/tmp/bridge-browser.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8766/ >/dev/null; then break; fi
+            sleep 1
+          done
+          NODE_PATH=/tmp/bridge-browser/node_modules BRIDGE_BROWSER="$BROWSER_BIN" BRIDGE_URL=http://127.0.0.1:8766 node --test src/full_deal_browser_test.cjs
+          kill "$SERVER_PID" 2>/dev/null || true
+          trap - EXIT
       - name: Publier uniquement le dossier BridgeDD
         shell: bash
         run: |
