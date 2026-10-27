@@ -47,6 +47,32 @@ function validate(hands){
   duplicates.length===0&&unknown.length===0&&missing.length===0;
  return {complete,counts,duplicates,missing,unknown,total:Object.values(counts).reduce((a,b)=>a+b,0)};
 }
+/* Complete a partially read hand by elimination only when the other
+   three hands have exactly 13 unique, valid cards each. No mutation and
+   no assignment when two or more hands have gaps or there are duplicates. */
+function completeFourthHand(hands){
+ const result=validate(hands);
+ const candidates=seats.filter(seat=>result.counts[seat]!==13);
+ const fallback={completed:false,hands,seat:null,added:[]};
+ if(result.complete||result.duplicates.length||result.unknown.length||
+    candidates.length!==1)return fallback;
+ const seat=candidates[0];
+ if(result.counts[seat]>=13 || result.missing.length!==13-result.counts[seat]||
+    !seats.every(s=>s===seat||result.counts[s]===13))return fallback;
+ const completed=empty();
+ for(const s of seats)for(const suit of suits)
+  completed[s][suit]=normalize(hands?.[s]?.[suit]||"").value;
+ for(const card of result.missing){
+  const suit=card[0],rank=card[1];
+  completed[seat][suit]+=rank;
+ }
+ for(const suit of suits){
+  completed[seat][suit]=[...completed[seat][suit]].sort(
+   (a,b)=>ranks.indexOf(a)-ranks.indexOf(b)).join("");
+ }
+ if(!validate(completed).complete)return fallback;
+ return {completed:true,hands:completed,seat,added:result.missing.slice()};
+}
 /* Identify FFB player headers in both colours, including mixed tables.
    North may be scrolled off-screen: the two complete horizontal player
    headers anchor the 329/101 geometry of the FFB deal diagram. */
@@ -117,7 +143,7 @@ function cropForRow(header,row,imWidth,imHeight){
  const y1=Math.min(imHeight,Math.round(y+h+h*(.56+row*.445)));
  return {x:x0,y:y0,w:Math.max(0,x1-x0),h:Math.max(0,y1-y0)};
 }
-const api={seats,suits,ranks,normalize,toFrench,empty,validate,detectGreenHeaders,detectFFBHeaders,cropForRow};
+const api={seats,suits,ranks,normalize,toFrench,empty,validate,completeFourthHand,detectGreenHeaders,detectFFBHeaders,cropForRow};
 root.BridgeFFB=api;
 if(typeof module==="object"&&module.exports)module.exports=api;
 })(typeof globalThis!=="undefined"?globalThis:this);
