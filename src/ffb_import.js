@@ -252,9 +252,8 @@ async function readFFB(source,headers){
  const chosen=useFast?specialized.hands:newHands;
  const fastValid=fast.complete||inferredFast?.completed;
  const genericValid=generic.complete||P.completeFourthHand(newHands).completed;
- const disagree=fastValid&&genericValid&&P.suits.some(suit=>
-  P.seats.some(seat=>P.normalize(specialized.hands[seat][suit]).value!==
-                       P.normalize(newHands[seat][suit]).value));
+ const disagree=fastValid&&genericValid&&
+  !P.sameDistribution(specialized.hands,newHands);
  const requiresReview=!!disagree||(useFast&&specialized.uncertain>3);
  return {hands:chosen,requiresReview,reason:disagree
   ?"Les deux lectures OCR diffèrent : vérifie les cartes avant de poursuivre."

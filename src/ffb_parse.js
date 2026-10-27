@@ -73,6 +73,15 @@ function completeFourthHand(hands){
  if(!validate(completed).complete)return fallback;
  return {completed:true,hands:completed,seat,added:result.missing.slice()};
 }
+/* Compare card attribution without treating rank order as a different deal. */
+function sameDistribution(left,right){
+ for(const seat of seats)for(const suit of suits){
+  const sorted=hands=>[...normalize(hands?.[seat]?.[suit]||"").value]
+   .sort((a,b)=>ranks.indexOf(a)-ranks.indexOf(b)).join("");
+  if(sorted(left)!==sorted(right))return false;
+ }
+ return true;
+}
 /* Identify FFB player headers in both colours, including mixed tables.
    North may be scrolled off-screen: the two complete horizontal player
    headers anchor the 329/101 geometry of the FFB deal diagram. */
@@ -143,7 +152,7 @@ function cropForRow(header,row,imWidth,imHeight){
  const y1=Math.min(imHeight,Math.round(y+h+h*(.56+row*.445)));
  return {x:x0,y:y0,w:Math.max(0,x1-x0),h:Math.max(0,y1-y0)};
 }
-const api={seats,suits,ranks,normalize,toFrench,empty,validate,completeFourthHand,detectGreenHeaders,detectFFBHeaders,cropForRow};
+const api={seats,suits,ranks,normalize,toFrench,empty,validate,completeFourthHand,sameDistribution,detectGreenHeaders,detectFFBHeaders,cropForRow};
 root.BridgeFFB=api;
 if(typeof module==="object"&&module.exports)module.exports=api;
 })(typeof globalThis!=="undefined"?globalThis:this);

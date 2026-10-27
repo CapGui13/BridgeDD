@@ -166,3 +166,43 @@ test("Invalid or extra ranks prevent completing a fourth hand",()=>{
  };
  assert.equal(p.completeFourthHand(original).completed,false);
 });
+
+test("OCR readings with identical cards in different order are equivalent",()=>{
+ const hands={
+  north:{S:"ARD762",H:"84",D:"R86",C:"62"},
+  west:{S:"V",H:"R652",D:"D9754",C:"DV3"},
+  east:{S:"1083",H:"V107",D:"AV102",C:"R107"},
+  south:{S:"954",H:"AD93",D:"3",C:"A9854"}
+ };
+ const other=JSON.parse(JSON.stringify(hands));
+ other.north.S="267DRA";
+ assert.equal(p.sameDistribution(hands,other),true);
+ other.north.S="267DRA8";
+ assert.equal(p.sameDistribution(hands,other),false);
+});
+test("OCR inference works for any seat and 1..13 missing ranks",()=>{
+ const full={
+  north:{S:"ARD762",H:"84",D:"R86",C:"62"},
+  west:{S:"V",H:"R652",D:"D9754",C:"DV3"},
+  east:{S:"1083",H:"V107",D:"AV102",C:"R107"},
+  south:{S:"954",H:"AD93",D:"3",C:"A9854"}
+ };
+ const cardsBySeat={};
+ for(const seat of p.seats){
+  cardsBySeat[seat]=p.suits.flatMap(suit=>[...p.normalize(full[seat][suit]).value]
+   .map(rank=>({suit,rank})));
+ }
+ for(const seat of p.seats)for(let missing=1;missing<=13;missing++){
+  const copy=JSON.parse(JSON.stringify(full));
+  const all=cardsBySeat[seat];
+  for(const {suit,rank} of all.slice(0,missing)){
+   copy[seat][suit]=[...p.normalize(copy[seat][suit]).value]
+    .filter(x=>x!==rank).join("");
+  }
+  const restored=p.completeFourthHand(copy);
+  assert.equal(restored.completed,true,seat+" "+missing);
+  assert.equal(restored.added.length,missing);
+  assert.equal(p.validate(restored.hands).complete,true);
+  assert.equal(p.sameDistribution(restored.hands,full),true);
+ }
+});
