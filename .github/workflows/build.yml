@@ -1,0 +1,105 @@
+name: Construire Bridge DD (dépôt dédié)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Télécharger DDS Web et construire Bridge DD
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth=1 --branch develop https://github.com/dds-bridge/dds.git /tmp/bridge-dds
+          mkdir -p docs
+          for f in dds_web.html dds_web.css dds_web.js dds_web_core.js dds_web_deal_import.js dds_web_play.js dds_web_sample_deals.js dds_web_solve.js coi-serviceworker.js; do
+            cp "/tmp/bridge-dds/web/$f" "docs/$f"
+          done
+          for f in dds_web_wasm.js dds_web_wasm_bin.js; do
+            curl --fail --location --retry 3 --silent --show-error "https://dds-bridge.github.io/dds/$f" -o "docs/$f"
+            test -s "docs/$f"
+          done
+          cp src/coach.js src/coach.css src/classic.css src/classic.js src/ffb_parse.js src/ffb_fast.js src/ffb_import.js src/ffb_import.css src/coach_rules.js src/dd_matrix.js src/dd_matrix.css src/manifest.webmanifest src/icon.svg docs/
+          touch docs/.nojekyll
+          # Dedicated iPhone home-screen icon and standard web app sizes.
+          python3 -m venv /tmp/bridge-dd-icon-env
+          /tmp/bridge-dd-icon-env/bin/pip install --quiet 'Pillow>=11,<13'
+          /tmp/bridge-dd-icon-env/bin/python src/make_pwa_icons.py BridgeDD
+          test -s docs/apple-touch-icon.png
+          test -s docs/icon-192.png
+          test -s docs/icon-512.png
+          # OCR exécuté localement ; aucun fichier de donne envoyé.
+          npm install --prefix /tmp/bridge-ocr --no-audit --no-fund --no-save --silent tesseract.js@5.1.1 tesseract.js-core@5.0.0
+          mkdir -p docs/ocr/core docs/ocr/lang
+          cp /tmp/bridge-ocr/node_modules/tesseract.js/dist/tesseract.min.js docs/ocr/
+          cp /tmp/bridge-ocr/node_modules/tesseract.js/dist/worker.min.js docs/ocr/
+          cp /tmp/bridge-ocr/node_modules/tesseract.js-core/tesseract-core*.wasm* docs/ocr/core/
+          curl --fail --location --retry 3 --silent --show-error https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/eng.traineddata -o docs/ocr/lang/eng.traineddata
+          gzip -f -9 -n docs/ocr/lang/eng.traineddata
+          cp /tmp/bridge-ocr/node_modules/tesseract.js/LICENSE.md docs/ocr/TESSERACT_JS_LICENSE.md
+          cp /tmp/bridge-dds/LICENSE docs/DDS_LICENSE.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("docs/dds_web.html")
+          html=p.read_text()
+          assert '<html lang="en">' in html
+          assert '</head>' in html and '</body>' in html
+          html=html.replace('<html lang="en">','<html lang="fr">')
+          html=html.replace('<title>DDS Web — Double Dummy Solver</title>', '<title>Bridge DD · Jeu interactif</title>')
+          html=html.replace('</head>','<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<meta name="theme-color" content="#304a94">\n<meta name="application-name" content="Bridge DD">\n<meta name="mobile-web-app-capable" content="yes">\n<meta name="apple-mobile-web-app-capable" content="yes">\n<meta name="apple-mobile-web-app-title" content="Bridge DD">\n<meta name="apple-mobile-web-app-status-bar-style" content="default">\n<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=pwa-v20">\n<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=pwa-v20">\n<link rel="manifest" href="manifest.webmanifest?v=pwa-v20">\n<link rel="stylesheet" href="coach.css?v=pwa-v20">\n<link rel="stylesheet" href="classic.css?v=geometry-v18">\n<link rel="stylesheet" href="ffb_import.css?v=ffb-v3">\n<link rel="stylesheet" href="dd_matrix.css?v=bridgemate-v1">\n</head>')
+          html=html.replace('</body>','<script src="coach_rules.js?v=optimal-v14"></script>\n<script src="coach.js?v=bridgemate-v19"></script>\n<script src="classic.js?v=geometry-v18"></script>\n<script src="ffb_parse.js?v=ffb-v3"></script>\n<script src="ffb_fast.js?v=ffb-v3"></script>\n<script src="ffb_import.js?v=wizard-v17"></script>\n<script src="dd_matrix.js?v=bridgemate-v1"></script>\n\n</body>')
+          Path("docs/index.html").write_text(html)
+          PY
+          node --test src/pwa_test.cjs
+          node --check docs/coach.js
+          node --check docs/dd_matrix.js
+          node --test src/dd_matrix_test.cjs
+          node src/wizard_test.cjs
+          node --check docs/classic.js
+          node --test src/layout_test.cjs
+          node --check docs/ffb_parse.js
+          node --check docs/ffb_fast.js
+          node --check docs/ffb_import.js
+          node --test src/ffb_test.cjs
+          grep -q 'classic.css' docs/index.html
+          grep -q 'ffb_import.js' docs/index.html
+          grep -q 'ffb_fast.js' docs/index.html
+          test -s docs/ocr/lang/eng.traineddata.gz
+          test -s docs/ocr/tesseract.min.js
+          rm -f docs/coach_keyboard.js
+          node --check docs/coach_rules.js
+          node --test src/coach_color_test.cjs
+          node --check docs/dds_web_play.js
+          ! grep -q "coach_keyboard.js" docs/index.html
+          test -s docs/index.html
+          test -s docs/dds_web_wasm_bin.js
+          node - <<'JS'
+          const fs = require('node:fs');
+          const vm = require('node:vm');
+          vm.runInThisContext(fs.readFileSync('docs/dds_web_wasm_bin.js', 'utf8'));
+          const bin = globalThis.ddsWebWasmBytes();
+          fs.writeFileSync('/tmp/bridge-dd.wasm', Buffer.from(bin));
+          JS
+          node /tmp/bridge-dds/web/tests/dds_web_wasm_node.mjs "$PWD/docs/dds_web_wasm.js" /tmp/bridge-dd.wasm
+      - name: Publier uniquement le dossier BridgeDD
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A docs/
+          if git diff --cached --quiet; then
+            echo "Déjà à jour."
+          else
+            git commit -m "Build Bridge DD with official DDS Web WASM"
+            git push origin HEAD:main
+          fi
