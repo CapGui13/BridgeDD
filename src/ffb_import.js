@@ -58,6 +58,7 @@ function repaintForm(){
 function updateValidation(){
  const v=P.validate(hands);
  const results=$("ffb-validation");
+ const missing=$("ffb-missing");
  const seats=seatOrder.map(seat=>seatNames[seat]+" "+v.counts[seat]+"/13").join(" · ");
  let issues="";
  if(v.duplicates.length)issues+=" Doublons : "+v.duplicates.map(x=>cardFr(x.slice(0,2))).join(", ")+".";
@@ -65,6 +66,15 @@ function updateValidation(){
  if(v.missing.length)issues+=" Manquantes : "+v.missing.length+".";
  results.textContent=(v.complete?"✓ Donne valide : 52 cartes distinctes. ":"À corriger : ")+seats+"."+issues;
  results.className=v.complete?"ffb-validation good":"ffb-validation warn";
+ const groups=suitOrder.map(suit=>{
+  const pips=v.missing.filter(card=>card[0]===suit)
+   .map(card=>P.toFrench(card[1]).trim());
+  return pips.length?symbols[suit]+" "+pips.join(" · "):null;
+ }).filter(Boolean);
+ missing.hidden=!groups.length;
+ missing.textContent=groups.length
+   ?"Cartes manquantes selon la reconnaissance : "+groups.join("   |   ")
+   :"";
  $("ffb-apply").disabled=busy||!v.complete;
  const incomplete=Object.keys(v.counts).filter(seat=>v.counts[seat]===12);
  const canFix=v.total===51&&v.missing.length===1&&
@@ -167,8 +177,13 @@ async function readFFB(source,headers){
   specialized=null;
  }
  const specializedCheck=specialized?P.validate(specialized.hands):null;
- if(specialized&&specialized.uncertain<=3&&specializedCheck?.complete){
-  setStatus("52 cartes reconnues : vérifie le diagramme avant de charger.");
+ const inferredFast=specialized?.readCount===16
+  ?P.completeFourthHand(specialized.hands):null;
+ if(specialized&&specialized.uncertain<=3&&
+    (specializedCheck?.complete||inferredFast?.completed)){
+  setStatus(inferredFast?.completed
+   ?"Main reconstituée par élimination."
+   :"52 cartes reconnues.");
   return specialized.hands;
  }
  setStatus("Deuxième lecture des cartes pour vérifier les cas difficiles…");
@@ -225,9 +240,14 @@ async function readFFB(source,headers){
  const fast= specializedCheck;
  // Ne pas préférer une seconde lecture qui perd des cartes ou introduit
  // des doublons. Toutes les erreurs restent vérifiables dans le formulaire.
- const score=v=>(v.complete?200:0)+v.total-6*v.duplicates.length-
-  3*v.unknown.length-Math.max(0,v.missing.length-2);
- return score(fast)>score(generic)?specialized.hands:newHands;
+ const score=(v,candidate)=>{
+  const inferred=P.completeFourthHand(candidate);
+  return (v.complete?200:0)+(inferred.completed?160:0)+v.total-
+   6*v.duplicates.length-3*v.unknown.length-
+   Math.max(0,v.missing.length-2);
+ };
+ return score(fast,specialized.hands)>score(generic,newHands)
+  ?specialized.hands:newHands;
 }
 async function handleFile(file) {
  if(!file||busy)return;
@@ -251,6 +271,11 @@ async function handleFile(file) {
   $("ffb-preview-image").src=imageUrl;
   $("ffb-image-details").hidden=false;
   hands=await readFFB(canvas,headers);
+  const inferred=P.completeFourthHand(hands);
+  if(inferred.completed){
+   hands=inferred.hands;
+   setStatus(inferred.added.length+" carte(s) déduite(s) automatiquement pour "+seatNames[inferred.seat]+".");
+  }
   repaintForm();
   // Une donne strictement complète (13 par main, 52 cartes différentes,
   // sans caractère inconnu) se charge sans confirmation supplémentaire.
@@ -309,6 +334,7 @@ function init(){
    <img alt="Capture d'écran sélectionnée" id="ffb-preview-image"></details>
   <div id="ffb-hands" class="ffb-hands"></div>
   <p id="ffb-validation" class="ffb-validation"></p>
+  <p id="ffb-missing" class="ffb-missing" hidden></p>
   <div class="ffb-buttons">
     <button type="button" id="ffb-complete" hidden></button>
     <button type="button" id="ffb-apply" disabled>Charger la donne</button>

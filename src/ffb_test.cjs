@@ -101,3 +101,68 @@ test("Eight supplied FFB deals are valid with 52 distinct cards",()=>{
   assert.equal(verdict.complete,true,"Donne "+(i+1)+": "+JSON.stringify(verdict));
  }
 });
+
+test("Complete 4th hand by elimination when three other hands contain 13 distinct cards",()=>{
+ const original={
+  north:{S:"ARD762",H:"84",D:"R86",C:"62"},
+  west:{S:"V",H:"R652",D:"D9754",C:"DV3"},
+  east:{S:"1083",H:"V107",D:"AV102",C:"R107"},
+  south:{S:"954",H:"",D:"",C:""}
+ };
+ const before=JSON.stringify(original);
+ const result=p.completeFourthHand(original);
+ assert.equal(result.completed,true);
+ assert.equal(result.seat,"south");
+ assert.equal(result.added.length,10);
+ assert.equal(result.hands.south.H,"AQ93");
+ assert.equal(result.hands.south.D,"3");
+ assert.equal(result.hands.south.C,"A9854");
+ assert.ok(p.validate(result.hands).complete);
+ assert.equal(JSON.stringify(original),before,"Input hands must not be modified");
+});
+test("Auto inference can complete a fully unread fourth hand",()=>{
+ const original={
+  north:{S:"ARD762",H:"84",D:"R86",C:"62"},
+  west:{S:"V",H:"R652",D:"D9754",C:"DV3"},
+  east:{S:"1083",H:"V107",D:"AV102",C:"R107"},
+  south:{S:"",H:"",D:"",C:""}
+ };
+ const result=p.completeFourthHand(original);
+ assert.equal(result.completed,true);
+ assert.equal(result.added.length,13);
+ assert.deepEqual(result.hands.south,{S:"954",H:"AQ93",D:"3",C:"A9854"});
+});
+test("Two incomplete hands are ambiguous and must keep OCR review",()=>{
+ const original={
+  north:{S:"ARD762",H:"84",D:"R86",C:"62"},
+  west:{S:"V",H:"R652",D:"D9754",C:"DV3"},
+  east:{S:"1083",H:"V107",D:"AV102",C:"R10"},
+  south:{S:"954",H:"AD93",D:"3",C:"A985"}
+ };
+ const result=p.completeFourthHand(original);
+ assert.equal(result.completed,false);
+ assert.equal(result.hands,original);
+ const v=p.validate(original);
+ assert.ok(v.missing.includes("C7"));
+ assert.ok(v.missing.includes("C4"));
+});
+test("Duplicates block automatic reconstruction despite three 13-card hands",()=>{
+ const original={
+  north:{S:"ARD762",H:"84",D:"R86",C:"62"},
+  west:{S:"V",H:"R652",D:"D9754",C:"DV3"},
+  east:{S:"1083",H:"V107",D:"AV102",C:"R107"},
+  south:{S:"A",H:"",D:"",C:""}
+ };
+ const r=p.completeFourthHand(original);
+ assert.equal(r.completed,false);
+ assert.ok(p.validate(original).duplicates.length>0);
+});
+test("Invalid or extra ranks prevent completing a fourth hand",()=>{
+ const original={
+  north:{S:"ARD762",H:"84",D:"R86",C:"62"},
+  west:{S:"V",H:"R652",D:"D9754",C:"DV3"},
+  east:{S:"1083",H:"V107",D:"AV102",C:"R107"},
+  south:{S:"954X",H:"",D:"",C:""}
+ };
+ assert.equal(p.completeFourthHand(original).completed,false);
+});

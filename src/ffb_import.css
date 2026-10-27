@@ -43,3 +43,18 @@
 @media (max-width:650px){
  #ffb-select{min-height:29px!important;height:29px!important;margin:2px 1px!important;padding:3px 6px!important;font-size:11px!important;border-radius:7px!important}
 }
+
+/* Cartes manquantes d'une lecture OCR encore incomplète. */
+#ffb-missing[hidden]{display:none!important}
+.ffb-missing{
+ margin:8px 0 12px;
+ padding:10px;
+ border:1px solid #ebcb8e;
+ border-radius:9px;
+ background:#fff9e9;
+ color:#74490d;
+ font-size:13px;
+ font-weight:600;
+ line-height:1.8;
+ overflow-wrap:anywhere;
+}
