@@ -169,3 +169,17 @@ body.bridge-wizard #deck-status{display:none!important}
   padding-bottom:max(12px,env(safe-area-inset-bottom,0px))!important;
  }
 }
+
+/* V22 : le solveur natif écrit parfois dans une zone masquée. */
+#bridge-solve-alert[hidden]{display:none!important}
+#bridge-solve-alert{
+ margin:8px 0;padding:10px 12px;border:1px solid #e3b5a6;
+ background:#fff1ec;color:#882f23;border-radius:9px;
+ font-size:13px;line-height:1.45;overflow-wrap:anywhere;
+}
+#bridge-solve-alert button{
+ background:#fff!important;color:#7b3026!important;
+ border:1px solid #cf9e8d!important;min-height:34px!important;
+ padding:5px 12px!important;font-weight:700!important;
+ margin:8px 0 0!important;
+}
