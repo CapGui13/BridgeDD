@@ -9,5 +9,7 @@ test("4 hands placed symmetrically around compass",()=>{
 });
 test("consistent gap for all lengths, shrink text instead",()=>{
  assert.match(css,/\.hand-holding\.bridge-dense[^}]*gap:3px!important/s);
- assert.match(js,/while\(size>6&& !fits\(\)\)/);
+ assert.match(js,/while\(verticalSize>9&&longest\(\)>maxVerticalWidth\)/);
+ assert.match(js,/--bridge-vertical-hand-width/);
+ assert.match(js,/const actualRowWidth=holder=>/);
 });
