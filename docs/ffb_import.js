@@ -317,12 +317,13 @@ function cropCanvas(image,rect,photo=false,alternate=false) {
  }
  // Sans plafond, la zone bas-droite d'une photo peut avoir un seuil Otsu
  // de 200+ et devenir un rectangle noir qui empêche toute reconnaissance.
- threshold=Math.min(threshold,Math.max(70,Math.min(135,median-25)));
- // Sur moniteur photographié, le seuil Otsu (souvent 100-110) efface
- // les anti-crénelages des chiffres. Après élimination des parasites,
- // un seuil de 120-135 conserve mieux les caractères A/R/D/8/9.
- threshold=Math.max(122,Math.min(136,threshold+20));
- if(alternate)threshold=Math.max(105,threshold-9);
+ // Conserver DEUX traitements réels en parallèle au lieu de remplacer
+ // l'ancien seuil par le nouveau. La V34 a dégradé plusieurs donneurs :
+ // un seul seuil ne convient pas à tous les caractères photographiés.
+ const baseline=Math.min(threshold,Math.max(70,Math.min(135,median-25)));
+ threshold=(alternate===true||alternate==="boosted")
+  ?Math.max(122,Math.min(136,baseline+20))
+  :alternate==="low" ?Math.max(65,baseline-9) :baseline;
  for(let i=0;i<n;i++){
   const v=smooth[i]<=threshold?0:255,j=i*4;
   pix.data[j]=pix.data[j+1]=pix.data[j+2]=v;
@@ -491,7 +492,9 @@ async function readFFB(source,headers,generation){
      doneRetry++;
      setStatus("Relecture des caractères incertains… "+doneRetry);
      const rect=P.cropForRow(entry.header,entry.row,source.width,source.height);
-     const cropped=cropCanvas(source,rect,true,true);
+     // La première lecture conserve le seuil ancien; cette seconde lecture
+     // utilise le seuil renforcé de V34 et est évaluée comme alternative.
+     const cropped=cropCanvas(source,rect,true,"boosted");
      const alternative=await worker.recognize(cropped);
      ensureCurrent(generation);
      const parsed=P.normalize(alternative.data.text,true);
@@ -756,7 +759,7 @@ function init(){
  $("ffb-apply").addEventListener("click",applyDeal);
  repaintForm();
 }
-window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop};
+window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();
