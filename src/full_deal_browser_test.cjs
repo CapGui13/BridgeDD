@@ -333,3 +333,34 @@ test("Wrong photo: choose another image, cancel, and abort slow OCR",{
   assert.equal(await page.locator("#bridge-upload").isVisible(),true);
  }finally{await browser.close();}
 });
+
+test("Monitor photo geometry is recognized in canvas even with colored pixel interference",{
+ timeout:120000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:667},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>!!window.BridgeFFB?.detectFFBHeaders,null,{timeout:45000});
+  const found=await page.evaluate(()=>{
+   const canvas=document.createElement("canvas");
+   canvas.width=1000;canvas.height=1333;
+   const c=canvas.getContext("2d");
+   c.fillStyle="#c3c4c0";c.fillRect(0,0,1000,1333);
+   for(const [x,y,w,h] of [[371,123,273,108],[69,455,262,101],
+    [690,451,268,101],[385,759,253,95]]){
+    c.fillStyle="#13601f";c.fillRect(x,y,w,h);
+    c.fillStyle="#d8d8ce";c.font="bold 20px Arial";
+    c.fillText("JOUEUR",x+60,y+45);
+   }
+   const data=c.getImageData(0,0,1000,1333);
+   return window.BridgeFFB.detectFFBHeaders(data);
+  });
+  assert.deepEqual(found.map(x=>x.seat),["north","west","east","south"]);
+  assert.ok(found.every(x=>x.photo===true));
+  assert.equal(found[3].inferred,undefined);
+ }finally{await browser.close();}
+});

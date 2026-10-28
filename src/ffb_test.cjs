@@ -206,3 +206,33 @@ test("OCR inference works for any seat and 1..13 missing ranks",()=>{
   assert.equal(p.sameDistribution(restored.hands,full),true);
  }
 });
+
+test("Photographed monitor FFB headers tolerate perspective, dark green and noise",()=>{
+ const w=1000,h=1333,data=new Uint8ClampedArray(w*h*4);
+ for(let i=0;i<w*h;i++){
+  const p=i*4;
+  data[p]=190;data[p+1]=190;data[p+2]=188;data[p+3]=255;
+ }
+ // Width and slight height differences copy the geometry of a phone photo;
+ // no player names or personal imagery is stored in the repository.
+ const blocks=[
+  {x:371,y:123,w:273,h:108},
+  {x:69,y:455,w:262,h:101},
+  {x:690,y:451,w:268,h:101},
+  {x:385,y:759,w:253,h:95}
+ ];
+ for(const {x,y,w:width,h:height} of blocks){
+  for(let cy=y;cy<y+height;cy++)for(let cx=x;cx<x+width;cx++){
+   const i=(cy*w+cx)*4,n=(cx*17+cy*29)%11;
+   data[i]=17+n;data[i+1]=90+n;data[i+2]=20+n;
+   // Simulate pale pixel interference from the monitor.
+   if((cx+cy*3)%23===0){data[i]=165;data[i+1]=166;data[i+2]=160;}
+  }
+ }
+ const found=p.detectFFBHeaders({width:w,height:h,data});
+ assert.deepEqual(found.map(x=>x.seat),["north","west","east","south"]);
+ assert.equal(found.every(x=>x.photo===true),true);
+ assert.equal(found[0].inferred,undefined,"Use the actual north banner");
+ assert.equal(found[3].inferred,undefined,"Use actual south despite perspective");
+ assert.ok(Math.abs(found[3].y-759)<7,JSON.stringify(found[3]));
+});

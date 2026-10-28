@@ -340,7 +340,12 @@ async function readFFB(source,headers,generation){
    6*v.duplicates.length-3*v.unknown.length-
    Math.max(0,v.missing.length-2);
  };
- const useFast=score(fast,specialized.hands)>score(generic,newHands);
+ // Sur photo d'écran, les gabarits de capture nette peuvent confondre
+ // certains glyphes du moniteur. Privilégier l'OCR contrasté ; le lecteur
+ // rapide ne sert que de dernier recours s'il n'a presque rien trouvé.
+ const useFast=isPhoto
+  ?generic.total<12&&fast.total>generic.total+12
+  :score(fast,specialized.hands)>score(generic,newHands);
  const chosen=useFast?specialized.hands:newHands;
  const fastValid=fast.complete||inferredFast?.completed;
  const genericValid=generic.complete||P.completeFourthHand(newHands).completed;
