@@ -213,6 +213,35 @@ function shiftCrop(rect,offset,imageWidth){
  const right=Math.min(imageWidth,rect.x+rect.w);
  return {x,y:rect.y,w:Math.max(5,right-x),h:rect.h};
 }
+// Preserve gray levels when Tesseract's own thresholding can recover strokes
+// lost by the hard black/white filter, especially leading honors on photos.
+function cropPhotoGrayscale(image,rect){
+ const raw=document.createElement("canvas");
+ raw.width=Math.max(1,Math.round(rect.w));
+ raw.height=Math.max(1,Math.round(rect.h));
+ const ctx=raw.getContext("2d",{willReadFrequently:true});
+ ctx.fillStyle="white";
+ ctx.fillRect(0,0,raw.width,raw.height);
+ ctx.drawImage(image,rect.x,rect.y,rect.w,rect.h,0,0,raw.width,raw.height);
+ restoreBlueBadgeDigit(raw);
+ const pix=ctx.getImageData(0,0,raw.width,raw.height);
+ for(let j=0;j<pix.data.length;j+=4){
+  const v=Math.round(.299*pix.data[j]+.587*pix.data[j+1]+.114*pix.data[j+2]);
+  // Keep antialiased strokes and mid-gray details for adaptive Otsu.
+  const adjusted=Math.max(0,Math.min(255,Math.round((v-100)*1.55+100)));
+  pix.data[j]=pix.data[j+1]=pix.data[j+2]=adjusted;
+ }
+ ctx.putImageData(pix,0,0);
+ const out=document.createElement("canvas"),pad=25;
+ out.width=raw.width*4+2*pad;
+ out.height=raw.height*4+2*pad;
+ const dest=out.getContext("2d");
+ dest.fillStyle="#fff";dest.fillRect(0,0,out.width,out.height);
+ dest.imageSmoothingEnabled=true;
+ dest.imageSmoothingQuality="high";
+ dest.drawImage(raw,pad,pad,raw.width*4,raw.height*4);
+ return out;
+}
 function cropCanvas(image,rect,photo=false,alternate=false) {
  if(!rect.w||!rect.h)throw new Error("Cadrage des cartes invalide.");
  // Pour une photo d'écran, binariser AVANT d'agrandir les pixels :
@@ -481,6 +510,36 @@ async function readFFB(source,headers,generation){
      if(currentPsm!=="7")await worker.setParameters({tessedit_pageseg_mode:"7"});
      ensureCurrent(generation);
      reconciled=window.BridgeOCRReconcile?.choose(candidateRows,P)||reconciled;
+     // Dernière tentative, uniquement sur les zones encore incomplètes.
+     // Réutiliser le cliché brut rehaussé (sans supprimer les traits fins).
+     // Ne jamais inférer une carte à partir de la seule longueur d'une main.
+     if(reconciled&&!reconciled.validation.complete&&!reconciled.inferred){
+      const remaining=new Set(P.seats.filter(s=>
+       reconciled.validation.counts[s]!==13));
+      const finalRows=candidateRows.filter(r=>remaining.has(r.seat));
+      await worker.setParameters({tessedit_pageseg_mode:"13"});
+      let i=0;
+      for(const entry of finalRows){
+       ensureCurrent(generation);
+       setStatus("Contrôle des caractères fins… "+(++i)+"/"+finalRows.length);
+       const rect=P.cropForRow(entry.header,entry.row,source.width,source.height);
+       const variants=[rect,shiftCrop(rect,Math.round(-entry.header.w*.075),source.width)];
+       for(const shape of variants){
+        const photo=cropPhotoGrayscale(source,shape);
+        const answer=await worker.recognize(photo);
+        ensureCurrent(generation);
+        const normalized=P.normalize(answer.data?.text,true);
+        if(!normalized.invalid&&normalized.value.length<=13&&
+           new Set(normalized.value).size===normalized.value.length&&
+           !entry.options.some(opt=>opt.value===normalized.value))
+         entry.options.push({value:normalized.value,
+          confidence:Number(answer.data?.confidence)||0});
+       }
+      }
+      await worker.setParameters({tessedit_pageseg_mode:"7"});
+      ensureCurrent(generation);
+      reconciled=window.BridgeOCRReconcile?.choose(candidateRows,P)||reconciled;
+     }
     }
     if(reconciled?.hands)for(const seat of P.seats)for(const suit of P.suits)
      newHands[seat][suit]=reconciled.hands[seat][suit];
