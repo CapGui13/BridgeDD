@@ -190,39 +190,51 @@ function baseCanvas(image){
 function trimPhotoInk(canvas){
  const context=canvas.getContext("2d",{willReadFrequently:true});
  const {width:w,height:h}=canvas;
- if(!w||!h)return canvas;
+ if(w<6||h<8)return canvas;
  const rgba=context.getImageData(0,0,w,h).data;
- const cols=new Uint16Array(w),rows=new Uint16Array(h);
- for(let y=2;y<h-2;y++)for(let x=0;x<w;x++){
-  const i=(y*w+x)*4;
-  if(rgba[i]<100){cols[x]++;rows[y]++;}
+ const binary=new Uint8Array(w*h),visited=new Uint8Array(w*h);
+ const queue=new Int32Array(w*h),components=[];
+ for(let i=0,j=0;i<binary.length;i++,j+=4)
+  binary[i]=rgba[j]<110?1:0;
+ // Conserver les véritables caractères (connexes, d'une hauteur et
+ // d'une surface réalistes). Les points de moiré de 1-3 pixels doivent
+ // être ignorés, surtout très loin à droite des cartes.
+ const minHeight=Math.max(8,Math.floor(h*.15));
+ const minArea=Math.max(13,Math.floor(h*.22));
+ for(let start=0;start<binary.length;start++){
+  if(!binary[start]||visited[start])continue;
+  visited[start]=1;
+  let n=1,head=0,left=w,top=h,right=-1,bottom=-1;
+  queue[0]=start;
+  while(head<n){
+   const i=queue[head++],y=Math.floor(i/w),x=i%w;
+   if(x<left)left=x;if(x>right)right=x;
+   if(y<top)top=y;if(y>bottom)bottom=y;
+   if(x>0){const j=i-1;if(binary[j]&&!visited[j]){visited[j]=1;queue[n++]=j;}}
+   if(x<w-1){const j=i+1;if(binary[j]&&!visited[j]){visited[j]=1;queue[n++]=j;}}
+   if(y>0){const j=i-w;if(binary[j]&&!visited[j]){visited[j]=1;queue[n++]=j;}}
+   if(y<h-1){const j=i+w;if(binary[j]&&!visited[j]){visited[j]=1;queue[n++]=j;}}
+  }
+  const cw=right-left+1,ch=bottom-top+1;
+  if(n>=minArea&&cw>=2&&ch>=minHeight)
+   components.push({left,right,top,bottom,area:n,width:cw,height:ch});
  }
- const runs=[];
- let start=-1;
- for(let x=0;x<=w;x++){
-  if(x<w&&cols[x]>=3){if(start<0)start=x;}
-  else if(start>=0){runs.push({start,end:x-1});start=-1;}
- }
- if(!runs.length)return canvas;
- let left=runs[0].start;
- // Des bouts de symboles ♠/♥/♦/♣ peuvent être au bord gauche du
- // cadrage. Un premier fragment étroit suivi d'une grande séparation
- // n'appartient pas aux rangs de cartes.
- if(runs.length>1&&runs[0].start<=3&&
-    runs[0].end-runs[0].start<15&&
-    runs[1].start-runs[0].end>=8)
-  left=runs[1].start;
- const right=runs[runs.length-1].end;
- if(right-left<3)return canvas;
- let top=0,bottom=h-1;
- for(let y=0;y<h;y++)if(rows[y]>=3){top=y;break;}
- for(let y=h-1;y>=0;y--)if(rows[y]>=3){bottom=y;break;}
- const x0=Math.max(0,left-5),y0=Math.max(0,top-5);
- const x1=Math.min(w,right+7),y1=Math.min(h,bottom+6);
+ if(!components.length)return canvas;
+ components.sort((a,b)=>a.left-b.left);
+ // Un bout de symbole de couleur recadré au bord gauche n'est pas un rang.
+ if(components.length>1&&components[0].left<=3&&
+    components[0].width<15&&
+    components[1].left-components[0].right>=8)
+  components.shift();
+ const x0=Math.max(0,Math.min(...components.map(c=>c.left))-5);
+ const x1=Math.min(w,Math.max(...components.map(c=>c.right))+8);
+ const y0=Math.max(0,Math.min(...components.map(c=>c.top))-5);
+ const y1=Math.min(h,Math.max(...components.map(c=>c.bottom))+7);
  if(x1-x0<5||y1-y0<8)return canvas;
  const output=document.createElement("canvas");
  output.width=x1-x0;output.height=y1-y0;
- output.getContext("2d").drawImage(canvas,x0,y0,output.width,output.height,0,0,output.width,output.height);
+ output.getContext("2d").drawImage(canvas,x0,y0,output.width,output.height,
+  0,0,output.width,output.height);
  return output;
 }
 function shiftCrop(rect,offset,imageWidth){
@@ -306,7 +318,11 @@ function cropCanvas(image,rect,photo=false,alternate=false) {
  // Sans plafond, la zone bas-droite d'une photo peut avoir un seuil Otsu
  // de 200+ et devenir un rectangle noir qui empêche toute reconnaissance.
  threshold=Math.min(threshold,Math.max(70,Math.min(135,median-25)));
- if(alternate)threshold=Math.max(65,threshold-9);
+ // Sur moniteur photographié, le seuil Otsu (souvent 100-110) efface
+ // les anti-crénelages des chiffres. Après élimination des parasites,
+ // un seuil de 120-135 conserve mieux les caractères A/R/D/8/9.
+ threshold=Math.max(122,Math.min(136,threshold+20));
+ if(alternate)threshold=Math.max(105,threshold-9);
  for(let i=0;i<n;i++){
   const v=smooth[i]<=threshold?0:255,j=i*4;
   pix.data[j]=pix.data[j+1]=pix.data[j+2]=v;
