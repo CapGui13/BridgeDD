@@ -200,7 +200,7 @@ function cropForRow(header,row,imWidth,imHeight){
 /* Photo OCR retry regions compensate a slight vertical camera perspective. */
 function cropForRowRetry(header,row,imWidth,imHeight,direction=0){
  const base=cropForRow(header,row,imWidth,imHeight);
- if(base.h<=0||base.w<=0)return base;
+ if(base.h<=0||base.w<=0)return {...base,y:Math.max(0,Math.min(imHeight,base.y)),h:0};
  const pad=Math.max(2,Math.round(header.h*.05));
  const shift=Math.round(header.h*.065*Math.max(-1,Math.min(1,direction)));
  const y0=Math.max(0,Math.min(imHeight,base.y-pad+shift));
