@@ -43,7 +43,7 @@ function init(){
    const key=source.dataset.card;
    if(!key)continue;
    const target=document.createElement("button");
-   target.type="button";target.className="bridge-card-choice";
+   target.type="button";target.className="bridge-card-choice";target.dataset.card=key;
    if(source.classList.contains("bridge-optimal"))target.classList.add("bridge-card-best");
    if(source.classList.contains("bridge-nonoptimal"))target.classList.add("bridge-card-other");
    target.textContent=hon[key[1]]||key[1];

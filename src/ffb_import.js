@@ -31,8 +31,23 @@ function showDialog(){
  $("ffb-dialog").hidden=false;
  $("ffb-close").focus();
 }
+function readLiveDeal(){
+ const source=typeof window.collectHands==="function"?window.collectHands():null;
+ if(!source)return null;
+ const built=P.empty();
+ const code={spades:"S",hearts:"H",diamonds:"D",clubs:"C"};
+ for(const seat of P.seats)for(const card of source[seat]||[]){
+  const suit=code[card.suit],pip=card.pip;
+  if(!suit||!P.ranks.includes(pip))return null;
+  built[seat][suit]+=pip;
+ }
+ return P.validate(built).complete?built:null;
+}
 function openReview(){
- if(busy||!P.validate(hands).complete)return false;
+ if(busy)return false;
+ const current=readLiveDeal();
+ if(current)hands=current;
+ if(!P.validate(hands).complete)return false;
  reviewSnapshot=JSON.parse(JSON.stringify(hands));
  repaintForm();
  setStatus("Vérifie les cartes reconnues. Tu peux corriger une couleur, puis charger la donne.");

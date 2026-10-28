@@ -64,6 +64,14 @@ test("52 actual legal card plays, optimal moves, undo, end of deal",{
     const button=document.querySelector(".hand-card[data-card='"+key+
      "'][data-direction='"+seat+"']");
     button.click();
+    const picker=document.getElementById("bridge-card-picker");
+    if(picker&&!picker.hidden){
+      const choice=picker.querySelector('.bridge-card-choice[data-card="'+key+'"]');
+      if(!choice)return {error:"Palette ouverte mais carte absente",key,seat};
+      if(choice.getBoundingClientRect().height<44)
+        return {error:"Cible tactile trop petite",key,seat};
+      choice.click();
+    }
     const after=window.playState.history.length;
     return {key,seat,before,after,played:button.classList.contains("bridge-played")};
    });
