@@ -173,7 +173,8 @@ function cropForRow(header,row,imWidth,imHeight){
  const x0=Math.max(0,Math.round(x+w*.15));
  const x1=Math.min(imWidth,Math.round(x+w*.968));
  const y0=Math.max(0,Math.round(y+h+h*(.13+row*.445)));
- const y1=Math.min(imHeight,Math.round(y+h+h*(.56+row*.445)));
+ // La hauteur .56 chevauche parfois la couleur suivante sur une photo.
+ const y1=Math.min(imHeight,Math.round(y+h+h*((header.photo?.47:.56)+row*.445)));
  return {x:x0,y:y0,w:Math.max(0,x1-x0),h:Math.max(0,y1-y0)};
 }
 const api={seats,suits,ranks,normalize,toFrench,empty,validate,completeFourthHand,sameDistribution,detectGreenHeaders,detectFFBHeaders,cropForRow};

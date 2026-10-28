@@ -168,7 +168,7 @@ function baseCanvas(image){
  ctx.drawImage(image,0,0,canvas.width,canvas.height);
  return canvas;
 }
-function cropCanvas(image,rect,photo=false) {
+function cropCanvas(image,rect,photo=false,alternate=false) {
  if(!rect.w||!rect.h)throw new Error("Cadrage des cartes invalide.");
  // Pour une photo d'écran, binariser AVANT d'agrandir les pixels :
  // cela supprime le moiré sans grossir les artefacts RGB de l'écran.
@@ -215,6 +215,7 @@ function cropCanvas(image,rect,photo=false) {
  // Sans plafond, la zone bas-droite d'une photo peut avoir un seuil Otsu
  // de 200+ et devenir un rectangle noir qui empêche toute reconnaissance.
  threshold=Math.min(threshold,Math.max(70,Math.min(135,median-25)));
+ if(alternate)threshold=Math.max(65,threshold-9);
  for(let i=0;i<n;i++){
   const v=smooth[i]<=threshold?0:255,j=i*4;
   pix.data[j]=pix.data[j+1]=pix.data[j+2]=v;
@@ -305,7 +306,7 @@ async function readFFB(source,headers,generation){
  }
  if(!window.Tesseract)throw new Error("Moteur de reconnaissance non disponible.");
  let worker=null;
- const newHands=P.empty();
+ const newHands=P.empty(),candidateRows=[];
  try {
   ensureCurrent(generation);
   worker=await window.Tesseract.createWorker("eng",1,{
@@ -339,6 +340,43 @@ async function readFFB(source,headers,generation){
     const parsed=P.normalize(result.data.text,true);
     // Ne pas inventer une valeur : la vérification finale est obligatoire.
     newHands[header.seat][suitOrder[row]]=parsed.value;
+    candidateRows.push({seat:header.seat,suit:suitOrder[row],
+      header,row,options:[{value:parsed.value,confidence:Number(result.data?.confidence)||0}]});
+   }
+  }
+  if(isPhoto){
+   const first=P.validate(newHands);
+   const inferred=P.completeFourthHand(newHands);
+   if(!first.complete&&!inferred.completed){
+    // Une seconde passe ciblée est moins lente qu'une relecture de 16 lignes.
+    // Inclure aussi les couleurs avec doublons, pas seulement les mains <13.
+    const suspect=new Set();
+    for(const r of candidateRows)
+     if(first.counts[r.seat]!==13||r.options[0].confidence<65)
+      suspect.add(r.seat+":"+r.suit);
+    const suitsWithDuplicates=new Set(first.duplicates.map(v=>v[0]));
+    let doneRetry=0;
+    const needsAll=first.total<40;
+    for(const entry of candidateRows){
+     if(!needsAll&&!suspect.has(entry.seat+":"+entry.suit)&&
+        !suitsWithDuplicates.has(entry.suit))continue;
+     ensureCurrent(generation);
+     doneRetry++;
+     setStatus("Relecture des caractères incertains… "+doneRetry);
+     const rect=P.cropForRow(entry.header,entry.row,source.width,source.height);
+     const cropped=cropCanvas(source,rect,true,true);
+     const alternative=await worker.recognize(cropped);
+     ensureCurrent(generation);
+     const parsed=P.normalize(alternative.data.text,true);
+     if(parsed.value!==entry.options[0].value)
+      entry.options.push({value:parsed.value,
+       confidence:Number(alternative.data?.confidence)||0});
+    }
+    if(window.BridgeOCRReconcile){
+     const reconciled=window.BridgeOCRReconcile.choose(candidateRows,P);
+     if(reconciled?.hands)for(const seat of P.seats)for(const suit of P.suits)
+      newHands[seat][suit]=reconciled.hands[seat][suit];
+    }
    }
   }
  } catch(err){
