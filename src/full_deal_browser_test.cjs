@@ -449,3 +449,49 @@ test("Photo moire speckles do not extend OCR crop beyond the actual ranks",{
   assert.ok(result.to>90,JSON.stringify(result));
  }finally{await browser.close();}
 });
+
+test("V35: old and boosted photo thresholds must remain separate OCR alternatives",{
+ timeout:90000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:667},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>!!window.BridgeFFBImport?.cropCanvas,
+   null,{timeout:45000});
+  const result=await page.evaluate(()=>{
+   const input=document.createElement("canvas");
+   input.width=220;input.height=52;
+   const ctx=input.getContext("2d");
+   const src=ctx.createImageData(input.width,input.height);
+   for(let i=0;i<src.data.length;i+=4){
+    src.data[i]=src.data[i+1]=src.data[i+2]=225;
+    src.data[i+3]=255;
+   }
+   // Text with intermediate gray antialiasing similar to a photographed LCD.
+   ctx.putImageData(src,0,0);
+   ctx.fillStyle="rgb(116,116,116)";
+   ctx.font="bold 29px Arial";
+   ctx.fillText("A 8 6 4",15,38);
+   for(let x=160;x<215;x+=13)
+    for(let y=3;y<50;y+=12)ctx.fillRect(x,y,1,1);
+   const rect={x:0,y:0,w:220,h:52};
+   const imgA=window.BridgeFFBImport.cropCanvas(input,rect,true,false);
+   const imgB=window.BridgeFFBImport.cropCanvas(input,rect,true,"boosted");
+   function fingerprint(canvas){
+    const im=canvas.getContext("2d").getImageData(
+      0,0,canvas.width,canvas.height).data;
+    let ink=0;for(let i=0;i<im.length;i+=4)if(im[i]<128)ink++;
+    return {w:canvas.width,h:canvas.height,ink};
+   }
+   return {legacy:fingerprint(imgA),boosted:fingerprint(imgB)};
+  });
+  assert.ok(result.legacy.ink>0);
+  assert.ok(result.boosted.ink>0);
+  assert.notDeepEqual(result.legacy,result.boosted,
+    "Two photo threshold variants must not silently collapse to one");
+ }finally{await browser.close();}
+});
