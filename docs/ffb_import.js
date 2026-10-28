@@ -208,6 +208,11 @@ function trimPhotoInk(canvas){
  output.getContext("2d").drawImage(canvas,x0,y0,output.width,output.height,0,0,output.width,output.height);
  return output;
 }
+function shiftCrop(rect,offset,imageWidth){
+ const x=Math.max(0,Math.min(imageWidth-5,rect.x+offset));
+ const right=Math.min(imageWidth,rect.x+rect.w);
+ return {x,y:rect.y,w:Math.max(5,right-x),h:rect.h};
+}
 function cropCanvas(image,rect,photo=false,alternate=false) {
  if(!rect.w||!rect.h)throw new Error("Cadrage des cartes invalide.");
  // Pour une photo d'écran, binariser AVANT d'agrandir les pixels :
@@ -429,11 +434,56 @@ async function readFFB(source,headers,generation){
     }
     await worker.setParameters({tessedit_pageseg_mode:"7"});
     ensureCurrent(generation);
-    if(window.BridgeOCRReconcile){
-     const reconciled=window.BridgeOCRReconcile.choose(candidateRows,P);
-     if(reconciled?.hands)for(const seat of P.seats)for(const suit of P.suits)
-      newHands[seat][suit]=reconciled.hands[seat][suit];
+    let reconciled=window.BridgeOCRReconcile?.choose(candidateRows,P);
+    let verdict=reconciled?.validation||P.validate(newHands);
+    if(!verdict.complete&&!reconciled?.inferred){
+     // Dernière lecture des lignes présentant réellement des anomalies.
+     // Certaines lettres au début de la ligne sont coupées dans le
+     // cadrage de base ; d'autres caractères sont répétés par l'OCR.
+     const problemSeats=new Set(P.seats.filter(seat=>verdict.counts[seat]!==13));
+     const problemSuits=new Set(verdict.duplicates.map(d=>d[0]));
+     const badRows=candidateRows.filter(entry=>
+      problemSeats.has(entry.seat)||
+      (problemSuits.has(entry.suit)&&entry.options[0].value.length<=3)||
+      entry.options.every(opt=>{
+       const v=P.normalize(opt.value).value;
+       return new Set(v).size!==v.length;
+      }));
+     const variations=[
+      {shift:-.075,psm:"7"}, // récupérer les premières cartes tronquées
+      {shift:.05,psm:"7"},   // retirer les artefacts de symbole de couleur
+      {shift:-.03,psm:"8"}   // relire le groupe comme un mot unique
+     ];
+     let recalc=0;
+     let currentPsm="7";
+     for(const entry of badRows){
+      const rect=P.cropForRow(entry.header,entry.row,source.width,source.height);
+      for(const v of variations){
+       ensureCurrent(generation);
+       setStatus("Vérification approfondie des cartes… "+(++recalc)+"/"+
+        (badRows.length*variations.length));
+       if(currentPsm!==v.psm){
+        await worker.setParameters({tessedit_pageseg_mode:v.psm});
+        currentPsm=v.psm;
+       }
+       const shifted=shiftCrop(rect,Math.round(entry.header.w*v.shift),source.width);
+       const crop=cropCanvas(source,shifted,true,false);
+       const answer=await worker.recognize(crop);
+       ensureCurrent(generation);
+       const normalized=P.normalize(answer.data.text,true);
+       if(!normalized.invalid&&normalized.value.length<=13&&
+          new Set(normalized.value).size===normalized.value.length&&
+          !entry.options.some(opt=>opt.value===normalized.value))
+        entry.options.push({value:normalized.value,
+         confidence:Number(answer.data?.confidence)||0});
+      }
+     }
+     if(currentPsm!=="7")await worker.setParameters({tessedit_pageseg_mode:"7"});
+     ensureCurrent(generation);
+     reconciled=window.BridgeOCRReconcile?.choose(candidateRows,P)||reconciled;
     }
+    if(reconciled?.hands)for(const seat of P.seats)for(const suit of P.suits)
+     newHands[seat][suit]=reconciled.hands[seat][suit];
    }
   }
  } catch(err){
@@ -597,7 +647,7 @@ function init(){
  $("ffb-apply").addEventListener("click",applyDeal);
  repaintForm();
 }
-window.BridgeFFBImport={openReview,trimPhotoInk};
+window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();
