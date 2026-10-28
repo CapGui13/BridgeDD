@@ -195,13 +195,14 @@
     </section>
     <section id="bridge-step-contract" class="bridge-wizard-step" hidden>
       <h2>Quel contrat a été joué ?</h2>
-      <p class="bridge-confirmed">✓ Donne reconnue : 52 cartes.</p>
+      <p id="bridge-import-summary" class="bridge-confirmed">✓ Donne reconnue : 52 cartes.</p>
       <div class="coach-fields" id="bridge-contract-fields">
         <label>Niveau<select id="coach-level"><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option></select></label>
         <label>Couleur<select id="coach-strain"><option value="S">♠</option><option value="H">♥</option><option value="D">♦</option><option value="C">♣</option><option value="N">SA</option></select></label>
         <label>Déclarant<select id="coach-seat"><option value="north">Nord</option><option value="east">Est</option><option value="south" selected>Sud</option><option value="west">Ouest</option></select></label>
       </div>
       <button id="coach-start" type="button" class="coach-primary">▶ Jouer et analyser</button>
+      <button id="bridge-verify-deal" type="button" class="bridge-verify">Vérifier / corriger les 52 cartes</button>
       <button id="bridge-contract-newphoto" type="button" class="bridge-secondary">Choisir une autre image</button>
       <p id="bridge-contract-error" class="bridge-error" hidden role="alert"></p>
     </section>
@@ -248,14 +249,26 @@
       }
     });
     $("bridge-contract-newphoto").addEventListener("click",newPhoto);
+    $("bridge-verify-deal").addEventListener("click",()=>{
+      if(!window.BridgeFFBImport?.openReview?.()){
+        const error=$("bridge-contract-error");
+        error.textContent="La donne n'est pas disponible pour vérification. Importe une nouvelle photo.";
+        error.hidden=false;
+      }
+    });
     $("bridge-newphoto").addEventListener("click",newPhoto);
     $("bridge-change-contract").addEventListener("click",()=>{
       if(window.isPlayMode?.())window.exitPlay();
       setStage("contract");
       update();
     });
-    window.addEventListener("bridge:deal-imported",()=>{
+    window.addEventListener("bridge:deal-imported",event=>{
       if(window.isPlayMode?.())window.exitPlay();
+      const inferred=event.detail?.inferred;
+      $("bridge-import-summary").textContent=inferred?.count
+       ?"✓ 52 cartes validées, dont "+inferred.count+" déduite"+
+        (inferred.count>1?"s":"")+" pour "+(seats[inferred.seat]||inferred.seat)+"."
+       :"✓ Donne reconnue : 52 cartes.";
       $("bridge-contract-error").hidden=true;
       setStage("contract");
       update();
