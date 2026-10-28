@@ -249,7 +249,7 @@ test("User monitor-photo OCR 50/52 is safely restored by known fourth hand",()=>
  const v=p.validate(hands);
  assert.equal(v.total,50);
  assert.deepEqual(v.counts,{north:11,east:13,south:13,west:13});
- assert.deepEqual(v.missing,["CT","CQ"]);
+ assert.deepEqual(v.missing,["CQ","CT"]);
  const resolved=p.completeFourthHand(hands);
  assert.equal(resolved.completed,true);
  assert.equal(resolved.seat,"north");
