@@ -221,3 +221,58 @@ test("iPhone geometry, optional 52-card review, and playable suit picker",{
   await page.close();
  }finally{await browser.close();}
 });
+
+test("user's screenshot deal: visible N/S card content centered on compass",{
+ timeout:120000
+},async()=>{
+ const browser=await chromium.launch({
+  headless:true,executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]
+ });
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:667},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000
+  });
+  await page.waitForFunction(()=>window.crossOriginIsolated&&
+   typeof window.startPlay==="function",null,{timeout:45000});
+  await page.evaluate(()=>{
+   // Same 52 cards as the screenshot submitted on 28 Oct, without names.
+   const deal=[
+    ["Q86","KT6","AQ","QJT43"],
+    ["AJ","AQ7","T984","A862"],
+    ["KT5","J94","KJ632","K9"],
+    ["97432","8532","75","75"]
+   ].map(row=>row.join("."));
+   window.fillFormWithTestData(deal);
+   window.dispatchEvent(new CustomEvent("bridge:deal-imported",{detail:{source:"test"}}));
+   document.getElementById("coach-start").click();
+  });
+  for(const width of [320,375,414]){
+   await page.setViewportSize({width,height:667});
+   await page.waitForTimeout(120);
+   const pos=await page.evaluate(()=>{
+    const rect=sel=>document.querySelector(sel).getBoundingClientRect();
+    const north=rect(".grid-item.hand-north"),south=rect(".grid-item.hand-south"),
+      compass=rect(".bridge-compass"),body=document.documentElement;
+    const symbols=["north","south"].flatMap(seat=>
+      [...document.querySelectorAll(".grid-item.hand-"+seat+
+        " .hand-suit > :is(spade-suit,heart-suit,diamond-suit,club-suit)")]);
+    const buttons=["north","south"].flatMap(seat=>
+      [...document.querySelectorAll(".grid-item.hand-"+seat+" .hand-card")]);
+    const left=Math.min(...symbols.map(x=>x.getBoundingClientRect().left));
+    const right=Math.max(...buttons.map(x=>x.getBoundingClientRect().right));
+    const cx=compass.x+compass.width/2;
+    return {left,right,cx,contentCenter:(left+right)/2,
+      northX:north.x,southX:south.x,actualWidth:right-left,
+      compassY:compass.y,scrollWidth:body.scrollWidth,viewport:innerWidth};
+   });
+   assert.ok(Math.abs(pos.northX-pos.southX)<=3,
+    "North and South suit glyphs align "+width+": "+JSON.stringify(pos));
+   assert.ok(Math.abs(pos.contentCenter-pos.cx)<=5,
+    "VISIBLE cards, not just their blank container, centered "+width+": "+JSON.stringify(pos));
+   assert.ok(pos.scrollWidth<=pos.viewport+2,
+    "No horizontal overflow "+width+": "+JSON.stringify(pos));
+  }
+ }finally{await browser.close();}
+});

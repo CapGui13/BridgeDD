@@ -19,19 +19,53 @@ function compass(){
  center.insertBefore(node,center.firstChild);
 }
 function fit(){
- if(!window.matchMedia("(max-width:650px)").matches)return;
- // Uniform spacing on every suit. Shrink only the font when a long suit
- // needs more room; never change the inter-card gap or hide a card.
- for(const seat of seats){
-   const holders=suits.map(suit=>document.getElementById(seat+"_"+suit+"_cards")).filter(Boolean);
-   if(!holders.length)continue;
-   // Same font size for all four suits of one hand keeps rows aligned.
+ const grid=document.querySelector(".grid-container");
+ if(!grid)return;
+ if(!window.matchMedia("(max-width:650px)").matches){
+   grid.style.removeProperty("--bridge-vertical-hand-width");
+   return;
+ }
+ // Mettre un repère de largeur identique à N/S (basé sur le PLUS LONG rang
+ // de cartes effectivement dessiné et non pas un conteneur de 80 %).
+ const holdersBySeat=Object.fromEntries(seats.map(seat=>[
+   seat,suits.map(suit=>document.getElementById(seat+"_"+suit+"_cards")).filter(Boolean)
+ ]));
+ const font=(seat,size)=>holdersBySeat[seat].forEach(el=>
+   el.style.setProperty("--bridge-pip-font",size+"px"));
+ const actualRowWidth=holder=>{
+   const row=holder.closest(".hand-suit");
+   if(!row)return 0;
+   const glyph=row.querySelector("spade-suit,heart-suit,diamond-suit,club-suit");
+   const cards=Array.from(holder.querySelectorAll(".hand-card"));
+   const gap=3;
+   return Math.ceil((glyph?.getBoundingClientRect().width||18)+gap+
+     cards.reduce((sum,card)=>sum+card.getBoundingClientRect().width,0)+
+     gap*Math.max(0,cards.length-1)+2);
+ };
+ // Une même taille de caractères pour Nord et Sud, y compris si l'une des
+ // mains contient une couleur très longue. L'axe des symboles reste commun.
+ let verticalSize=18;
+ const maxVerticalWidth=Math.max(90,grid.clientWidth-16);
+ grid.style.removeProperty("--bridge-vertical-hand-width");
+ font("north",verticalSize);
+ font("south",verticalSize);
+ const longest=()=>Math.max(0,...["north","south"].flatMap(seat=>
+   holdersBySeat[seat].map(actualRowWidth)));
+ while(verticalSize>9&&longest()>maxVerticalWidth){
+   verticalSize-=.5;
+   font("north",verticalSize);
+   font("south",verticalSize);
+ }
+ const width=Math.min(maxVerticalWidth,longest());
+ if(width>0)grid.style.setProperty("--bridge-vertical-hand-width",width+"px");
+ for(const seat of ["west","east"]){
+   const holders=holdersBySeat[seat];
    let size=18;
-   for(const el of holders)el.style.setProperty("--bridge-pip-font",size+"px");
+   font(seat,size);
    const fits=()=>holders.every(el=>el.scrollWidth<=el.clientWidth+1);
-   while(size>6&& !fits()){
-     size-=0.5;
-     for(const el of holders)el.style.setProperty("--bridge-pip-font",size+"px");
+   while(size>9&&!fits()){
+     size-=.5;
+     font(seat,size);
    }
  }
 }

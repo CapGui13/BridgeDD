@@ -204,3 +204,18 @@
  body.playing .grid-item .hand-suit{cursor:pointer!important}
  body.playing .grid-item .hand-suit>.hand-holding{cursor:pointer!important}
 }
+
+/* V24 — Le bloc centré doit épouser la largeur réelle des cartes.
+   La V23 centrait un rectangle de 80 %, laissant les cartes collées à gauche. */
+@media(max-width:650px){
+ .grid-item.hand-north,.grid-item.hand-south{
+   width:var(--bridge-vertical-hand-width,max-content)!important;
+   max-width:calc(100% - 8px)!important;
+   min-width:0!important;
+   justify-self:center!important;
+   align-self:center!important;
+ }
+ .grid-item.hand-north .hand-suit,.grid-item.hand-south .hand-suit{
+   width:100%!important;
+ }
+}
