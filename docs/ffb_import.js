@@ -351,12 +351,22 @@ async function readFFB(source,headers,generation){
     // Une seconde passe ciblée est moins lente qu'une relecture de 16 lignes.
     // Inclure aussi les couleurs avec doublons, pas seulement les mains <13.
     const suspect=new Set();
-    for(const r of candidateRows)
-     if(first.counts[r.seat]!==13||r.options[0].confidence<65)
+    for(const r of candidateRows){
+     const confidence=r.options[0].confidence;
+     // Tesseract PSM 7 omet souvent des mots très courts sur écran
+     // (ex. « AD », « 75 », « R9 »). Les relire même si la confiance
+     // du premier passage semble excellente.
+     if(first.counts[r.seat]!==13||confidence<75||
+        r.options[0].value.length<=3)
       suspect.add(r.seat+":"+r.suit);
+    }
     const suitsWithDuplicates=new Set(first.duplicates.map(v=>v[0]));
     let doneRetry=0;
-    const needsAll=first.total<40;
+    const needsAll=first.total<43;
+    // Mode « mot unique » au lieu de « ligne » : il peut récupérer les
+    // valeurs isolées ignorées sur les photographies de moniteur.
+    await worker.setParameters({tessedit_pageseg_mode:"8"});
+    ensureCurrent(generation);
     for(const entry of candidateRows){
      if(!needsAll&&!suspect.has(entry.seat+":"+entry.suit)&&
         !suitsWithDuplicates.has(entry.suit))continue;
@@ -372,6 +382,8 @@ async function readFFB(source,headers,generation){
       entry.options.push({value:parsed.value,
        confidence:Number(alternative.data?.confidence)||0});
     }
+    await worker.setParameters({tessedit_pageseg_mode:"7"});
+    ensureCurrent(generation);
     if(window.BridgeOCRReconcile){
      const reconciled=window.BridgeOCRReconcile.choose(candidateRows,P);
      if(reconciled?.hands)for(const seat of P.seats)for(const suit of P.suits)
