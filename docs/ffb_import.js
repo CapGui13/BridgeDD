@@ -9,6 +9,7 @@ const seatNames={north:"Nord",east:"Est",south:"Sud",west:"Ouest"};
 const seatOrder=["north","west","east","south"];
 const suitOrder=["S","H","D","C"];
 let hands=P.empty(), busy=false, imageUrl=null;
+let reviewSnapshot=null,lastInferred=null;
 const $=id=>document.getElementById(id);
 function setStatus(message){$("ffb-status").textContent=message;}
 function setBusy(value){
@@ -19,11 +20,39 @@ function setBusy(value){
 function closeDialog(){
  if(busy)return;
  $("ffb-dialog").hidden=true;
- if(imageUrl){URL.revokeObjectURL(imageUrl);imageUrl=null;}
+ if(reviewSnapshot){
+  hands=reviewSnapshot;
+  reviewSnapshot=null;
+  repaintForm();
+ }
+ // Conserver l'aperçu tant que l'on peut vérifier la donne importée.
 }
 function showDialog(){
  $("ffb-dialog").hidden=false;
  $("ffb-close").focus();
+}
+function readLiveDeal(){
+ const source=typeof window.collectHands==="function"?window.collectHands():null;
+ if(!source)return null;
+ const built=P.empty();
+ const code={spades:"S",hearts:"H",diamonds:"D",clubs:"C"};
+ for(const seat of P.seats)for(const card of source[seat]||[]){
+  const suit=code[card.suit],pip=card.pip;
+  if(!suit||!P.ranks.includes(pip))return null;
+  built[seat][suit]+=pip;
+ }
+ return P.validate(built).complete?built:null;
+}
+function openReview(){
+ if(busy)return false;
+ const current=readLiveDeal();
+ if(current)hands=current;
+ if(!P.validate(hands).complete)return false;
+ reviewSnapshot=JSON.parse(JSON.stringify(hands));
+ repaintForm();
+ setStatus("Vérifie les cartes reconnues. Tu peux corriger une couleur, puis charger la donne.");
+ showDialog();
+ return true;
 }
 function repaintForm(){
  const area=$("ffb-hands");
@@ -265,6 +294,8 @@ async function handleFile(file) {
  if(!file||busy)return;
  // Ne jamais conserver les cartes de la précédente photo pendant la lecture.
  hands=P.empty();
+ lastInferred=null;
+ reviewSnapshot=null;
  let importAutomatically=false;
  setBusy(true);showDialog();
  repaintForm();
@@ -287,6 +318,7 @@ async function handleFile(file) {
   const inferred=P.completeFourthHand(hands);
   if(inferred.completed){
    hands=inferred.hands;
+   lastInferred={seat:inferred.seat,count:inferred.added.length};
    setStatus(inferred.added.length+" carte(s) déduite(s) automatiquement pour "+seatNames[inferred.seat]+".");
   }
   repaintForm();
@@ -322,8 +354,11 @@ function applyDeal(){
  const deal=["north","east","south","west"].map(seat=>
   suitOrder.map(suit=>P.normalize(hands[seat][suit]).value).join("."));
  window.fillFormWithTestData(deal);
+ reviewSnapshot=null; // Vérification confirmée : conserver les corrections.
  closeDialog();
- window.dispatchEvent(new CustomEvent("bridge:deal-imported",{detail:{source:"ffb"}}));
+ window.dispatchEvent(new CustomEvent("bridge:deal-imported",{
+  detail:{source:"ffb",inferred:lastInferred}
+ }));
  $("ffb-file").value="";
  const state=$("coach-verdict");
  if(state){state.className="coach-verdict good";state.textContent="Donne FFB importée : 52 cartes validées. Choisis un contrat puis joue !";}
@@ -362,6 +397,7 @@ function init(){
  $("ffb-apply").addEventListener("click",applyDeal);
  repaintForm();
 }
+window.BridgeFFBImport={openReview};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();
