@@ -236,3 +236,29 @@ test("Photographed monitor FFB headers tolerate perspective, dark green and nois
  assert.equal(found[3].inferred,undefined,"Use actual south despite perspective");
  assert.ok(Math.abs(found[3].y-759)<7,JSON.stringify(found[3]));
 });
+
+test("User monitor-photo OCR 50/52 is safely restored by known fourth hand",()=>{
+ // 16 ranks recovered from original-resolution photo with median-filter OCR.
+ // No screenshot or identifying player information is stored in the repo.
+ const hands={
+  north:{S:"D86",H:"R106",D:"AD",C:"V43"},
+  west:{S:"97432",H:"8532",D:"75",C:"75"},
+  east:{S:"AV",H:"AD7",D:"10984",C:"A862"},
+  south:{S:"R105",H:"V94",D:"RV632",C:"R9"}
+ };
+ const v=p.validate(hands);
+ assert.equal(v.total,50);
+ assert.deepEqual(v.counts,{north:11,east:13,south:13,west:13});
+ assert.deepEqual(v.missing,["CT","CQ"]);
+ const resolved=p.completeFourthHand(hands);
+ assert.equal(resolved.completed,true);
+ assert.equal(resolved.seat,"north");
+ assert.equal(resolved.added.length,2);
+ assert.equal(p.validate(resolved.hands).complete,true);
+ assert.equal(p.sameDistribution(resolved.hands,{
+  north:{S:"D86",H:"R106",D:"AD",C:"DV1043"},
+  west:{S:"97432",H:"8532",D:"75",C:"75"},
+  east:{S:"AV",H:"AD7",D:"10984",C:"A862"},
+  south:{S:"R105",H:"V94",D:"RV632",C:"R9"}
+ }),true);
+});
