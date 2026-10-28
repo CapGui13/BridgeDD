@@ -155,7 +155,10 @@ async function loadImage(file) {
  });
 }
 function baseCanvas(image){
- const maxWidth=1000,ratio=Math.min(1,maxWidth/image.naturalWidth);
+ // Ne jamais dégrader une photo de moniteur 1536 px à 1000 px :
+ // cela efface des jambages et les deux chiffres de « 10 ».
+ const maxWidth=1600,maxHeight=2400;
+ const ratio=Math.min(1,maxWidth/image.naturalWidth,maxHeight/image.naturalHeight);
  const canvas=document.createElement("canvas");
  canvas.width=Math.round(image.naturalWidth*ratio);
  canvas.height=Math.round(image.naturalHeight*ratio);
@@ -179,35 +182,54 @@ function cropCanvas(image,rect,photo=false) {
  restoreBlueBadgeDigit(canvas);
  if(!photo)return canvas;
  const pix=ctx.getImageData(0,0,canvas.width,canvas.height);
- const hist=new Int32Array(256),gray=new Uint8Array(canvas.width*canvas.height);
- for(let i=0;i<gray.length;i++){
-  const j=i*4,r=pix.data[j],g=pix.data[j+1],b=pix.data[j+2];
-  const value=Math.round(.299*r+.587*g+.114*b);
-  hist[value]++;gray[i]=value;
+ const width=canvas.width,height=canvas.height,n=width*height;
+ const gray=new Uint8Array(n),smooth=new Uint8Array(n);
+ // Le capteur photographie les sous-pixels R/V/B du moniteur : un filtre
+ // médian 3x3 avant binarisation supprime le moiré local sans effacer les
+ // contours des chiffres, contrairement à un simple flou.
+ for(let i=0;i<n;i++){
+  const j=i*4;
+  gray[i]=Math.round(.299*pix.data[j]+.587*pix.data[j+1]+.114*pix.data[j+2]);
  }
- let sum=0,background=0,weight=0,max=-1,threshold=128;
+ smooth.set(gray);
+ const neighbors=new Uint8Array(9);
+ for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){
+  let k=0;
+  for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)
+   neighbors[k++]=gray[(y+dy)*width+x+dx];
+  neighbors.sort();
+  smooth[y*width+x]=neighbors[4];
+ }
+ const hist=new Int32Array(256);
+ for(const value of smooth)hist[value]++;
+ let sum=0,seen=0,weighted=0,max=-1,threshold=128,median=128;
  for(let i=0;i<256;i++)sum+=i*hist[i];
  for(let i=0;i<256;i++){
-  background+=hist[i];
-  if(!background)continue;
-  weight+=i*hist[i];
-  const remaining=gray.length-background;
-  if(!remaining)break;
-  const separation=Math.pow(sum/gray.length-weight/background,2)*
-   background*gray.length/remaining;
+  seen+=hist[i];weighted+=i*hist[i];
+  if(seen>=n/2&&median===128)median=i;
+  const remaining=n-seen;
+  if(!seen||!remaining)continue;
+  const separation=Math.pow(sum/n-weighted/seen,2)*seen*n/remaining;
   if(separation>max){max=separation;threshold=i;}
  }
- for(let i=0;i<gray.length;i++){
-  const v=gray[i]<=threshold?0:255,j=i*4;
+ // Sans plafond, la zone bas-droite d'une photo peut avoir un seuil Otsu
+ // de 200+ et devenir un rectangle noir qui empêche toute reconnaissance.
+ threshold=Math.min(threshold,Math.max(70,Math.min(135,median-25)));
+ for(let i=0;i<n;i++){
+  const v=smooth[i]<=threshold?0:255,j=i*4;
   pix.data[j]=pix.data[j+1]=pix.data[j+2]=v;
   pix.data[j+3]=255;
  }
  ctx.putImageData(pix,0,0);
+ const pad=12;
  const zoom=document.createElement("canvas");
- zoom.width=canvas.width*3;zoom.height=canvas.height*3;
+ zoom.width=canvas.width*3+pad*2;
+ zoom.height=canvas.height*3+pad*2;
  const zoomCtx=zoom.getContext("2d",{willReadFrequently:true});
- zoomCtx.imageSmoothingEnabled=true;
- zoomCtx.drawImage(canvas,0,0,zoom.width,zoom.height);
+ zoomCtx.fillStyle="white";
+ zoomCtx.fillRect(0,0,zoom.width,zoom.height);
+ zoomCtx.imageSmoothingEnabled=false;
+ zoomCtx.drawImage(canvas,pad,pad,canvas.width*3,canvas.height*3);
  return zoom;
 }
 /* FFB overlays the card just played with a blue disk and white rank.
