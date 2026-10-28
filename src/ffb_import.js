@@ -10,6 +10,7 @@ const seatOrder=["north","west","east","south"];
 const suitOrder=["S","H","D","C"];
 let hands=P.empty(), busy=false, imageUrl=null;
 let reviewSnapshot=null,lastInferred=null,recognitionGeneration=0;
+let orderWarnings=[];
 const $=id=>document.getElementById(id);
 function setStatus(message){$("ffb-status").textContent=message;}
 function setBusy(value){
@@ -92,10 +93,19 @@ function repaintForm(){
    input.type="text";input.autocapitalize="characters";
    input.spellcheck=false;input.autocomplete="off";
    input.inputMode="text";input.dataset.seat=seat;input.dataset.suit=suit;
-   input.value=P.toFrench(hands[seat][suit]).replace(/ /g,"");
+   input.value=P.toFrench(P.orderInfo(hands[seat][suit]).sorted).replace(/ /g,"");
    input.setAttribute("aria-label",seatNames[seat]+" "+symbols[suit]);
    input.addEventListener("input",()=>{
     hands[seat][suit]=P.normalize(input.value).value;
+    orderWarnings=orderWarnings.filter(w=>w.seat!==seat||w.suit!==suit);
+    updateValidation();
+   });
+   input.addEventListener("blur",()=>{
+    const info=P.orderInfo(input.value);
+    if(info.valid){
+     hands[seat][suit]=info.sorted;
+     input.value=P.toFrench(info.sorted).replace(/ /g,"");
+    }
     updateValidation();
    });
    label.append(glyph,input);box.append(label);
@@ -109,12 +119,19 @@ function updateValidation(){
  const results=$("ffb-validation");
  const missing=$("ffb-missing");
  const seats=seatOrder.map(seat=>seatNames[seat]+" "+v.counts[seat]+"/13").join(" · ");
+ const warnings=orderWarnings.filter(w=>w?.seat&&w?.suit);
  let issues="";
  if(v.duplicates.length)issues+=" Doublons : "+v.duplicates.map(x=>cardFr(x.slice(0,2))).join(", ")+".";
  if(v.unknown.length)issues+=" Caractères inconnus à corriger.";
  if(v.missing.length)issues+=" Manquantes : "+v.missing.length+".";
- results.textContent=(v.complete?"✓ Donne valide : 52 cartes distinctes. ":"À corriger : ")+seats+"."+issues;
- results.className=v.complete?"ffb-validation good":"ffb-validation warn";
+ if(warnings.length)
+  issues+=" Ordre impossible lu par l'OCR : "+
+   warnings.map(x=>seatNames[x.seat]+" "+symbols[x.suit]).join(", ")+
+   ". Cartes triées : vérifie leur identité sur la photo.";
+ results.textContent=(v.complete
+  ?(warnings.length?"⚠ 52 cartes distinctes, mais OCR à vérifier. ":"✓ Donne valide : 52 cartes distinctes. ")
+  :"À corriger : ")+seats+"."+issues;
+ results.className=v.complete&&!warnings.length?"ffb-validation good":"ffb-validation warn";
  const groups=suitOrder.map(suit=>{
   const pips=v.missing.filter(card=>card[0]===suit)
    .map(card=>P.toFrench(card[1]).trim());
@@ -426,10 +443,13 @@ async function readFFB(source,headers,generation){
   if(isPhoto){
    const first=P.validate(newHands);
    const inferred=P.completeFourthHand(newHands);
-   if(!first.complete&&!inferred.completed){
+   if((!first.complete&&!inferred.completed)||
+      candidateRows.some(r=>P.orderInfo(r.options[0].value).outOfOrder)){
     // Une seconde passe ciblée est moins lente qu'une relecture de 16 lignes.
     // Inclure aussi les couleurs avec doublons, pas seulement les mains <13.
     const suspect=new Set();
+    const invertedSuits=new Set(candidateRows.filter(r=>
+     P.orderInfo(r.options[0].value).outOfOrder).map(r=>r.suit));
     for(const r of candidateRows){
      const confidence=r.options[0].confidence;
      // Tesseract PSM 7 omet souvent des mots très courts sur écran
@@ -439,7 +459,9 @@ async function readFFB(source,headers,generation){
         r.options[0].value.length<=3)
       suspect.add(r.seat+":"+r.suit);
     }
-    const suitsWithDuplicates=new Set(first.duplicates.map(v=>v[0]));
+    const suitsWithDuplicates=new Set([
+     ...first.duplicates.map(v=>v[0]),...invertedSuits
+    ]);
     let doneRetry=0;
     const needsAll=first.total<43;
     // Mode « mot unique » au lieu de « ligne » : il peut récupérer les
@@ -465,15 +487,18 @@ async function readFFB(source,headers,generation){
     ensureCurrent(generation);
     let reconciled=window.BridgeOCRReconcile?.choose(candidateRows,P);
     let verdict=reconciled?.validation||P.validate(newHands);
-    if(!verdict.complete&&!reconciled?.inferred){
+    if((!verdict.complete&&!reconciled?.inferred)||reconciled?.orderWarnings?.length){
      // Dernière lecture des lignes présentant réellement des anomalies.
      // Certaines lettres au début de la ligne sont coupées dans le
      // cadrage de base ; d'autres caractères sont répétés par l'OCR.
      const problemSeats=new Set(P.seats.filter(seat=>verdict.counts[seat]!==13));
-     const problemSuits=new Set(verdict.duplicates.map(d=>d[0]));
+     const problemSuits=new Set([
+      ...verdict.duplicates.map(d=>d[0]),
+      ...(reconciled?.orderWarnings||[]).map(x=>x.suit)
+     ]);
      const badRows=candidateRows.filter(entry=>
       problemSeats.has(entry.seat)||
-      (problemSuits.has(entry.suit)&&entry.options[0].value.length<=3)||
+      problemSuits.has(entry.suit)||
       entry.options.every(opt=>{
        const v=P.normalize(opt.value).value;
        return new Set(v).size!==v.length;
@@ -513,10 +538,12 @@ async function readFFB(source,headers,generation){
      // Dernière tentative, uniquement sur les zones encore incomplètes.
      // Réutiliser le cliché brut rehaussé (sans supprimer les traits fins).
      // Ne jamais inférer une carte à partir de la seule longueur d'une main.
-     if(reconciled&&!reconciled.validation.complete&&!reconciled.inferred){
+     if(reconciled&&((!reconciled.validation.complete&&!reconciled.inferred)||reconciled.orderWarnings?.length)){
       const remaining=new Set(P.seats.filter(s=>
        reconciled.validation.counts[s]!==13));
-      const finalRows=candidateRows.filter(r=>remaining.has(r.seat));
+      const doubtful=new Set((reconciled.orderWarnings||[]).map(x=>x.suit));
+      const finalRows=candidateRows.filter(r=>
+       remaining.has(r.seat)||doubtful.has(r.suit));
       await worker.setParameters({tessedit_pageseg_mode:"13"});
       let i=0;
       for(const entry of finalRows){
@@ -541,8 +568,11 @@ async function readFFB(source,headers,generation){
       reconciled=window.BridgeOCRReconcile?.choose(candidateRows,P)||reconciled;
      }
     }
-    if(reconciled?.hands)for(const seat of P.seats)for(const suit of P.suits)
-     newHands[seat][suit]=reconciled.hands[seat][suit];
+    if(reconciled?.hands){
+     for(const seat of P.seats)for(const suit of P.suits)
+      newHands[seat][suit]=reconciled.hands[seat][suit];
+     orderWarnings=reconciled.orderWarnings||[];
+    }
    }
   }
  } catch(err){
@@ -572,7 +602,9 @@ async function readFFB(source,headers,generation){
  const useFast=isPhoto
   ?generic.total<12&&fast.total>generic.total+12
   :score(fast,specialized.hands)>score(generic,newHands);
- const chosen=useFast?specialized.hands:newHands;
+ const chosen=P.orderedHands(useFast?specialized.hands:newHands);
+ if(useFast)orderWarnings=P.seats.flatMap(seat=>P.suits.flatMap(suit=>
+  P.orderInfo(specialized.hands[seat][suit]).outOfOrder?[{seat,suit}]:[]));
  const fastValid=fast.complete||inferredFast?.completed;
  const genericValid=generic.complete||P.completeFourthHand(newHands).completed;
  const disagree=fastValid&&genericValid&&
@@ -593,6 +625,7 @@ async function handleFile(file) {
  hands=P.empty();
  lastInferred=null;
  reviewSnapshot=null;
+ orderWarnings=[];
  if(imageUrl){URL.revokeObjectURL(imageUrl);imageUrl=null;}
  $("ffb-image-details").hidden=true;
  $("ffb-preview-image").removeAttribute("src");
@@ -616,7 +649,7 @@ async function handleFile(file) {
   $("ffb-image-details").hidden=false;
   const reading=await readFFB(canvas,headers,generation);
   ensureCurrent(generation);
-  hands=reading.hands;
+  hands=P.orderedHands(reading.hands);
   const inferred=P.completeFourthHand(hands);
   if(inferred.completed){
    hands=inferred.hands;
@@ -658,8 +691,9 @@ function applyDeal(){
  if(typeof window.fillFormWithTestData!=="function"){
   setStatus("Le moteur de jeu n'est pas encore prêt.");return;
  }
+ const canonical=P.orderedHands(hands);
  const deal=["north","east","south","west"].map(seat=>
-  suitOrder.map(suit=>P.normalize(hands[seat][suit]).value).join("."));
+  suitOrder.map(suit=>P.normalize(canonical[seat][suit]).value).join("."));
  window.fillFormWithTestData(deal);
  reviewSnapshot=null; // Vérification confirmée : conserver les corrections.
  closeDialog();
