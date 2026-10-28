@@ -35,3 +35,32 @@ test("Conflicting or duplicate OCR does not fabricate a full deck",()=>{
  assert.equal(result.inferred,false);
  assert.ok(result.validation.missing.length>=2);
 });
+
+test("V29: short two-card rows need alternate OCR and recover user's missing ranks",()=>{
+ const source={
+  north:{S:"Q86",H:"KT6",D:"AQ",C:"QJT43"},
+  west:{S:"97432",H:"8532",D:"75",C:"75"},
+  east:{S:"AJ",H:"AQ7",D:"T984",C:"A862"},
+  south:{S:"KT5",H:"J94",D:"KJ632",C:"K9"}
+ };
+ const missing={
+  north:{S:"Q8",H:"KT",D:"AQ",C:"Q"},
+  west:{D:"75",C:"75"},
+  south:{C:"9"}
+ };
+ const rows=P.seats.flatMap(seat=>P.suits.map(suit=>{
+  const correct=source[seat][suit];
+  const absent=missing[seat]?.[suit]||"";
+  const raw=[...correct].filter(rank=>!absent.includes(rank)).join("");
+  return {seat,suit,options:absent?
+   [{value:raw,confidence:85},{value:correct,confidence:68}]:
+   [{value:correct,confidence:87}]};
+ }));
+ const before=P.empty();
+ for(const row of rows)before[row.seat][row.suit]=row.options[0].value;
+ assert.equal(P.validate(before).missing.length,12);
+ const result=R.choose(rows,P);
+ assert.ok(result);
+ assert.equal(result.validation.complete,true,JSON.stringify(result.validation));
+ assert.ok(P.sameDistribution(result.hands,source));
+});
