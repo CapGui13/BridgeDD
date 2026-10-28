@@ -64,3 +64,43 @@ test("V29: short two-card rows need alternate OCR and recover user's missing ran
  assert.equal(result.validation.complete,true,JSON.stringify(result.validation));
  assert.ok(P.sameDistribution(result.hands,source));
 });
+
+test("V31: actual photographed FFB OCR errors can be resolved without inventing cards",()=>{
+ const actual={
+  north:{S:"Q86",H:"KT6",D:"AQ",C:"QJT43"},
+  west:{S:"97432",H:"8532",D:"75",C:"75"},
+  east:{S:"AJ",H:"AQ7",D:"T984",C:"A862"},
+  south:{S:"KT5",H:"J94",D:"KJ632",C:"K9"}
+ };
+ const shown={
+  north:{S:"6",H:"6",D:"",C:"JT43"},
+  west:{S:"97432",H:"8532",D:"73",C:"75"},
+  east:{S:"AJ",H:"AQ7",D:"7TT984",C:"A862"},
+  south:{S:"KT5",H:"J94",D:"KJ632",C:"K99"}
+ };
+ const rows=P.seats.flatMap(seat=>P.suits.map(suit=>{
+  const bad=shown[seat][suit],good=actual[seat][suit];
+  return {seat,suit,options:bad===good?
+   [{value:bad,confidence:91}]:
+   [{value:bad,confidence:83},{value:good,confidence:67}]};
+ }));
+ const check=R.choose(rows,P);
+ assert.ok(check);
+ assert.equal(check.validation.complete,true,JSON.stringify(check.validation));
+ assert.equal(P.sameDistribution(check.hands,actual),true);
+});
+test("V31: a sole OCR guess still cannot synthesize missing cards",()=>{
+ const actual={
+  north:{S:"6",H:"6",D:"",C:"JT43"},
+  west:{S:"97432",H:"8532",D:"73",C:"75"},
+  east:{S:"AJ",H:"AQ7",D:"7TT984",C:"A862"},
+  south:{S:"KT5",H:"J94",D:"KJ632",C:"K99"}
+ };
+ const rows=P.seats.flatMap(seat=>P.suits.map(suit=>({
+  seat,suit,options:[{value:actual[seat][suit],confidence:99}]
+ })));
+ const check=R.choose(rows,P);
+ assert.ok(check);
+ assert.equal(check.validation.complete,false);
+ assert.ok(check.validation.missing.length>0);
+});

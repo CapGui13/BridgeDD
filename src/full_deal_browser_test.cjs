@@ -395,3 +395,27 @@ test("OCR photo crop: trim blank area while preserving all visible digits",{
    "All glyphs remain in photo crop: "+JSON.stringify(stats));
  }finally{await browser.close();}
 });
+
+test("V31: alternative photo crops can add left margin and avoid overflow",{
+ timeout:90000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:667},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>!!window.BridgeFFBImport?.shiftCrop,null,{timeout:45000});
+  const r=await page.evaluate(()=>{
+   const crop={x:100,y:300,w:260,h:48};
+   const expand=window.BridgeFFBImport.shiftCrop(crop,-29,1000);
+   const tighten=window.BridgeFFBImport.shiftCrop(crop,20,1000);
+   const bound=window.BridgeFFBImport.shiftCrop(crop,-300,1000);
+   return {expand,tighten,bound};
+  });
+  assert.deepEqual(r.expand,{x:71,y:300,w:289,h:48});
+  assert.deepEqual(r.tighten,{x:120,y:300,w:240,h:48});
+  assert.equal(r.bound.x,0);
+ }finally{await browser.close();}
+});
