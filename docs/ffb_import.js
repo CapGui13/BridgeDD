@@ -165,9 +165,11 @@ function baseCanvas(image){
  ctx.drawImage(image,0,0,canvas.width,canvas.height);
  return canvas;
 }
-function cropCanvas(image,rect) {
+function cropCanvas(image,rect,photo=false) {
  if(!rect.w||!rect.h)throw new Error("Cadrage des cartes invalide.");
- const scale=3,canvas=document.createElement("canvas");
+ // Pour une photo d'écran, binariser AVANT d'agrandir les pixels :
+ // cela supprime le moiré sans grossir les artefacts RGB de l'écran.
+ const scale=photo?1:3,canvas=document.createElement("canvas");
  canvas.width=Math.max(1,Math.round(rect.w*scale));
  canvas.height=Math.max(1,Math.round(rect.h*scale));
  const ctx=canvas.getContext("2d",{willReadFrequently:true});
@@ -175,7 +177,38 @@ function cropCanvas(image,rect) {
  ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";
  ctx.drawImage(image,rect.x,rect.y,rect.w,rect.h,0,0,canvas.width,canvas.height);
  restoreBlueBadgeDigit(canvas);
- return canvas;
+ if(!photo)return canvas;
+ const pix=ctx.getImageData(0,0,canvas.width,canvas.height);
+ const hist=new Int32Array(256),gray=new Uint8Array(canvas.width*canvas.height);
+ for(let i=0;i<gray.length;i++){
+  const j=i*4,r=pix.data[j],g=pix.data[j+1],b=pix.data[j+2];
+  const value=Math.round(.299*r+.587*g+.114*b);
+  hist[value]++;gray[i]=value;
+ }
+ let sum=0,background=0,weight=0,max=-1,threshold=128;
+ for(let i=0;i<256;i++)sum+=i*hist[i];
+ for(let i=0;i<256;i++){
+  background+=hist[i];
+  if(!background)continue;
+  weight+=i*hist[i];
+  const remaining=gray.length-background;
+  if(!remaining)break;
+  const separation=Math.pow(sum/gray.length-weight/background,2)*
+   background*gray.length/remaining;
+  if(separation>max){max=separation;threshold=i;}
+ }
+ for(let i=0;i<gray.length;i++){
+  const v=gray[i]<=threshold?0:255,j=i*4;
+  pix.data[j]=pix.data[j+1]=pix.data[j+2]=v;
+  pix.data[j+3]=255;
+ }
+ ctx.putImageData(pix,0,0);
+ const zoom=document.createElement("canvas");
+ zoom.width=canvas.width*3;zoom.height=canvas.height*3;
+ const zoomCtx=zoom.getContext("2d",{willReadFrequently:true});
+ zoomCtx.imageSmoothingEnabled=true;
+ zoomCtx.drawImage(canvas,0,0,zoom.width,zoom.height);
+ return zoom;
 }
 /* FFB overlays the card just played with a blue disk and white rank.
    Transform only that disk into white paper with a black digit before OCR.
@@ -227,9 +260,10 @@ async function readFFB(source,headers,generation){
   specialized=null;
  }
  const specializedCheck=specialized?P.validate(specialized.hands):null;
+ const isPhoto=!!headers.some(h=>h.photo);
  const inferredFast=specialized?.readCount===16
   ?P.completeFourthHand(specialized.hands):null;
- if(specialized&&specialized.uncertain<=3&&
+ if(!isPhoto&&specialized&&specialized.uncertain<=3&&
     (specializedCheck?.complete||inferredFast?.completed)){
   setStatus(inferredFast?.completed
    ?"Main reconstituée par élimination."
@@ -243,7 +277,7 @@ async function readFFB(source,headers,generation){
   if(specialized?.readCount===16){
    setStatus("Lecture partielle : vérifie et complète les cartes.");
    return {hands:specialized.hands,requiresReview:true,reason:
-    "Lecture incertaine : vérifie la donne avant de poursuivre."};
+    "Photo d'écran ou lecture incertaine : vérifie la donne avant de poursuivre."};
   }
   throw err;
  }
@@ -277,7 +311,7 @@ async function readFFB(source,headers,generation){
     done++;
     setStatus("Lecture des cartes… "+done+"/16");
     const rect=P.cropForRow(header,row,source.width,source.height);
-    const cropped=cropCanvas(source,rect);
+    const cropped=cropCanvas(source,rect,isPhoto);
     const result=await worker.recognize(cropped);
     ensureCurrent(generation);
     const parsed=P.normalize(result.data.text,true);
@@ -295,7 +329,8 @@ async function readFFB(source,headers,generation){
   throw err;
  } finally {if(worker)await worker.terminate();}
  const generic=P.validate(newHands);
- if(!specialized)return {hands:newHands,requiresReview:false,reason:""};
+ if(!specialized)return {hands:newHands,requiresReview:isPhoto,reason:
+  isPhoto?"Photo d'écran : vérifie les cartes reconnues avant de poursuivre.":""};
  const fast= specializedCheck;
  // Ne pas préférer une seconde lecture qui perd des cartes ou introduit
  // des doublons. Toutes les erreurs restent vérifiables dans le formulaire.
@@ -311,11 +346,12 @@ async function readFFB(source,headers,generation){
  const genericValid=generic.complete||P.completeFourthHand(newHands).completed;
  const disagree=fastValid&&genericValid&&
   !P.sameDistribution(specialized.hands,newHands);
- const requiresReview=!!disagree||(useFast&&specialized.uncertain>3);
+ const requiresReview=isPhoto||!!disagree||(useFast&&specialized.uncertain>3);
  return {hands:chosen,requiresReview,reason:disagree
   ?"Les deux lectures OCR diffèrent : vérifie les cartes avant de poursuivre."
   :(requiresReview
-    ?"Reconnaissance incertaine : vérifie les cartes avant de poursuivre."
+    ?(isPhoto?"Photo d'écran : vérifie les cartes et corrige les caractères incertains."
+      :"Reconnaissance incertaine : vérifie les cartes avant de poursuivre.")
     :"")};
 }
 async function handleFile(file) {

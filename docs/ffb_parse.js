@@ -92,7 +92,9 @@ function detectFFBHeaders(image){
  const pixel=new Uint8Array(n),queue=new Int32Array(n);
  for(let i=0,j=0;i<n;i++,j+=4){
   const r=data[j],g=data[j+1],b=data[j+2];
-  const green=g>88&&g>r*1.65&&g>b*1.22&&r<110&&b<155;
+  // Le vert d'un écran photographié est plus sombre (moiré, exposition),
+  // contrairement au pixel vert uniforme d'une capture directe.
+  const green=g>55&&g>r*1.27&&g>b*1.12&&r<155&&b<175;
   const pink=r>245&&g>198&&g<245&&b>191&&b<243&&r-g>12&&Math.abs(g-b)<16;
   pixel[i]=green?1:(pink?2:0);
  }
@@ -112,8 +114,8 @@ function detectFFBHeaders(image){
    }
   }
   const bw=maxX-minX+1,bh=maxY-minY+1;
-  if(bw>=w*.26&&bh>=Math.max(13,h*.009)&&bw/bh>1.6&&bw/bh<12&&
-     tail>=bw*bh*.25)
+  if(bw>=w*.17&&bh>=Math.max(12,h*.008)&&bw/bh>1.6&&bw/bh<12&&
+     tail>=bw*bh*.21)
    components.push({x:minX,y:minY,w:bw,h:bh,area:tail});
  }
  let best=null,bestScore=-Infinity;
@@ -121,10 +123,10 @@ function detectFFBHeaders(image){
   if(left===right||left.x>=right.x)continue;
   const a=(left.x+left.w/2)/w,b=(right.x+right.w/2)/w;
   if(a>.47||b<.53||b-a<.35)continue;
-  if(Math.abs(left.y-right.y)>Math.max(5,Math.min(left.h,right.h)*.1))continue;
-  if(Math.abs(left.w-right.w)>Math.max(left.w,right.w)*.12)continue;
-  if(Math.abs(left.h-right.h)>Math.max(left.h,right.h)*.13)continue;
-  if(Math.min(left.h,right.h)<w*.08)continue;
+  if(Math.abs(left.y-right.y)>Math.max(8,Math.min(left.h,right.h)*.19))continue;
+  if(Math.abs(left.w-right.w)>Math.max(left.w,right.w)*.22)continue;
+  if(Math.abs(left.h-right.h)>Math.max(left.h,right.h)*.25)continue;
+  if(Math.min(left.h,right.h)<w*.055)continue;
   const score=left.area+right.area-Math.abs(left.y-right.y)*100;
   if(score>bestScore){best=[left,right];bestScore=score;}
  }
@@ -135,11 +137,33 @@ function detectFFBHeaders(image){
  const yMiddle=Math.round((west.y+east.y)/2);
  const xMiddle=Math.round((west.x+east.x)/2);
  const offset=Math.round(height*(329/101));
+ // Sur une photo prise de biais, la projection géométrique de N/S à
+ // partir de O/E peut décaler les cartes de plusieurs dizaines de pixels.
+ // Chercher les vrais bandeaux N/S avant d'utiliser cette projection.
+ const chooseVertical=(targetY)=>{
+  const predictedX=xMiddle+width/2;
+  const options=components.filter(c=>
+   c!==west&&c!==east&&c.x+c.w/2>w*.35&&c.x+c.w/2<w*.65&&
+   Math.abs(c.x+c.w/2-predictedX)<width*.55&&
+   Math.abs(c.y-targetY)<height*.85&&
+   c.w>width*.70&&c.w<width*1.32&&
+   c.h>height*.65&&c.h<height*1.42);
+  options.sort((a,b)=>
+   Math.abs(a.y-targetY)-Math.abs(b.y-targetY)+
+   (Math.abs(a.x+a.w/2-predictedX)-
+    Math.abs(b.x+b.w/2-predictedX))*.2);
+  return options[0]||null;
+ };
+ const north=chooseVertical(yMiddle-offset);
+ const south=chooseVertical(yMiddle+offset);
+ // Les photos d'écran sont plus petites dans le champ et peuvent avoir
+ // une légère perspective : la seconde lecture OCR demande une vérification.
+ const photo=width<w*.34;
  return [
-  {seat:"north",x:xMiddle,y:yMiddle-offset,w:width,h:height,inferred:true},
-  {seat:"west",...west},
-  {seat:"east",...east},
-  {seat:"south",x:xMiddle,y:yMiddle+offset,w:width,h:height,inferred:true}
+  {seat:"north",...(north||{x:xMiddle,y:yMiddle-offset,w:width,h:height,inferred:true}),photo},
+  {seat:"west",...west,photo},
+  {seat:"east",...east,photo},
+  {seat:"south",...(south||{x:xMiddle,y:yMiddle+offset,w:width,h:height,inferred:true}),photo}
  ];
 }
 function detectGreenHeaders(image){return detectFFBHeaders(image);}
