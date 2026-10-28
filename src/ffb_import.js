@@ -326,6 +326,9 @@ async function handleFile(file) {
  hands=P.empty();
  lastInferred=null;
  reviewSnapshot=null;
+ if(imageUrl){URL.revokeObjectURL(imageUrl);imageUrl=null;}
+ $("ffb-image-details").hidden=true;
+ $("ffb-preview-image").removeAttribute("src");
  let importAutomatically=false;
  setBusy(true);showDialog();
  repaintForm();

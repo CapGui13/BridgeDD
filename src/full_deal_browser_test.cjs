@@ -276,3 +276,60 @@ test("user's screenshot deal: visible N/S card content centered on compass",{
   }
  }finally{await browser.close();}
 });
+
+test("Wrong photo: choose another image, cancel, and abort slow OCR",{
+ timeout:120000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:667},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>!!window.BridgeFFBImport&&
+   !!document.getElementById("ffb-file"),null,{timeout:45000});
+  const wrong={name:"mauvaise-photo.png",mimeType:"image/png",
+   buffer:Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Rfs4AAAAASUVORK5CYII=","base64")};
+  // iOS-like flow: the application's upload button opens a file chooser.
+  const upload=page.waitForEvent("filechooser");
+  await page.locator("#bridge-upload").click();
+  await (await upload).setFiles(wrong);
+  await page.locator("#ffb-status").getByText("Reconnaissance impossible",{exact:false}).waitFor({timeout:12000});
+  assert.equal(await page.locator("#ffb-dialog").isVisible(),true);
+  assert.equal(await page.locator("#ffb-choose-another").isEnabled(),true);
+  const retryChooser=page.waitForEvent("filechooser");
+  await page.locator("#ffb-choose-another").click();
+  await (await retryChooser).setFiles(wrong); // same filename is allowed
+  await page.locator("#ffb-status").getByText("Reconnaissance impossible",{exact:false}).waitFor({timeout:12000});
+  await page.locator("#ffb-close").click();
+  assert.equal(await page.locator("#ffb-dialog").isVisible(),false);
+  assert.equal(await page.locator("#bridge-upload").isVisible(),true);
+  // Long OCR must never trap the user or reopen the dialog afterwards.
+  await page.evaluate(()=>{
+   window.BridgeFFB.detectFFBHeaders=()=>[
+    {seat:"north",x:0,y:0,w:1,h:1},
+    {seat:"west",x:0,y:0,w:1,h:1},
+    {seat:"east",x:0,y:0,w:1,h:1},
+    {seat:"south",x:0,y:0,w:1,h:1}];
+   window.BridgeFFBFast.recognize=()=>({
+    hands:window.BridgeFFB.empty(),readCount:16,uncertain:8});
+   window.Tesseract={createWorker:()=>new Promise(resolve=>{
+    window.finishSlowOcr=()=>resolve({
+     terminate:async()=>{},setParameters:async()=>{},
+     recognize:async()=>({data:{text:"A"}})});
+   })};
+  });
+  await page.locator("#ffb-file").setInputFiles(wrong);
+  await page.waitForFunction(()=>typeof window.finishSlowOcr==="function",null,{timeout:12000});
+  assert.equal(await page.locator("#ffb-choose-another").isEnabled(),true);
+  assert.equal(await page.locator("#ffb-close").isEnabled(),true);
+  await page.locator("#ffb-close").click();
+  assert.equal(await page.locator("#ffb-dialog").isVisible(),false);
+  await page.evaluate(()=>window.finishSlowOcr());
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator("#ffb-dialog").isVisible(),false,
+   "Cancelled OCR must not reopen the correction window");
+  assert.equal(await page.locator("#bridge-upload").isVisible(),true);
+ }finally{await browser.close();}
+});
