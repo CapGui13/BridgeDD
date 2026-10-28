@@ -196,7 +196,18 @@ function cropForRow(header,row,imWidth,imHeight){
  const y1=Math.min(imHeight,Math.round(y+h+h*((header.photo?.47:.56)+row*.445)));
  return {x:x0,y:y0,w:Math.max(0,x1-x0),h:Math.max(0,y1-y0)};
 }
-const api={seats,suits,ranks,normalize,orderInfo,orderedHands,toFrench,empty,validate,completeFourthHand,sameDistribution,detectGreenHeaders,detectFFBHeaders,cropForRow};
+
+/* Photo OCR retry regions compensate a slight vertical camera perspective. */
+function cropForRowRetry(header,row,imWidth,imHeight,direction=0){
+ const base=cropForRow(header,row,imWidth,imHeight);
+ if(base.h<=0||base.w<=0)return base;
+ const pad=Math.max(2,Math.round(header.h*.05));
+ const shift=Math.round(header.h*.065*Math.max(-1,Math.min(1,direction)));
+ const y0=Math.max(0,Math.min(imHeight,base.y-pad+shift));
+ const y1=Math.max(y0,Math.min(imHeight,base.y+base.h+pad+shift));
+ return {...base,y:y0,h:y1-y0};
+}
+const api={seats,suits,ranks,normalize,orderInfo,orderedHands,toFrench,empty,validate,completeFourthHand,sameDistribution,detectGreenHeaders,detectFFBHeaders,cropForRow,cropForRowRetry};
 root.BridgeFFB=api;
 if(typeof module==="object"&&module.exports)module.exports=api;
 })(typeof globalThis!=="undefined"?globalThis:this);

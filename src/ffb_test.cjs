@@ -295,3 +295,29 @@ test("Sorting a 52-card deal does not fix rank swaps between seats",()=>{
   south:{...wrong.south,C:"K9"}
  }),false);
 });
+
+test("V36: photographic OCR retry crops expand and shift vertically",()=>{
+ const header={x:300,y:100,w:250,h:100,photo:true};
+ const base=p.cropForRow(header,1,900,900);
+ const center=p.cropForRowRetry(header,1,900,900,0);
+ const up=p.cropForRowRetry(header,1,900,900,-1);
+ const down=p.cropForRowRetry(header,1,900,900,1);
+ assert.ok(center.y<base.y&&center.h>base.h);
+ assert.ok(up.y<center.y&&down.y>center.y);
+ assert.equal(up.x,base.x);
+ assert.equal(down.w,base.w);
+ const end=p.cropForRowRetry({...header,y:780},3,900,900,1);
+ assert.ok(end.y>=0&&end.y+end.h<=900);
+});
+test("V36: screenshot eight missing cards require further OCR not guesswork",()=>{
+ const hands={
+  north:{S:"6",H:"",D:"V107",C:"AD1072"},
+  west:{S:"AR",H:"",D:"8542",C:"V643"},
+  east:{S:"V87542",H:"D53",D:"",C:"R95"},
+  south:{S:"D1093",H:"R109",D:"ARD963",C:""}
+ };
+ const v=p.validate(hands);
+ assert.deepEqual(v.counts,{north:9,east:12,south:13,west:10});
+ assert.deepEqual(v.missing,["HA","HJ","H8","H7","H6","H4","H2","C8"]);
+ assert.equal(p.completeFourthHand(hands).completed,false);
+});

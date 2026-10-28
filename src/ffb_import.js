@@ -244,7 +244,7 @@ function shiftCrop(rect,offset,imageWidth){
 }
 // Preserve gray levels when Tesseract's own thresholding can recover strokes
 // lost by the hard black/white filter, especially leading honors on photos.
-function cropPhotoGrayscale(image,rect){
+function cropPhotoGrayscale(image,rect,trim=false){
  const raw=document.createElement("canvas");
  raw.width=Math.max(1,Math.round(rect.w));
  raw.height=Math.max(1,Math.round(rect.h));
@@ -261,14 +261,16 @@ function cropPhotoGrayscale(image,rect){
   pix.data[j]=pix.data[j+1]=pix.data[j+2]=adjusted;
  }
  ctx.putImageData(pix,0,0);
+ // Add a trimmed gray candidate without removing the legacy candidate.
+ const textRegion=trim?trimPhotoInk(raw):raw;
  const out=document.createElement("canvas"),pad=25;
- out.width=raw.width*4+2*pad;
- out.height=raw.height*4+2*pad;
+ out.width=textRegion.width*4+2*pad;
+ out.height=textRegion.height*4+2*pad;
  const dest=out.getContext("2d");
  dest.fillStyle="#fff";dest.fillRect(0,0,out.width,out.height);
  dest.imageSmoothingEnabled=true;
  dest.imageSmoothingQuality="high";
- dest.drawImage(raw,pad,pad,raw.width*4,raw.height*4);
+ dest.drawImage(textRegion,pad,pad,textRegion.width*4,textRegion.height*4);
  return out;
 }
 function cropCanvas(image,rect,photo=false,alternate=false) {
@@ -554,35 +556,50 @@ async function readFFB(source,headers,generation){
      if(currentPsm!=="7")await worker.setParameters({tessedit_pageseg_mode:"7"});
      ensureCurrent(generation);
      reconciled=window.BridgeOCRReconcile?.choose(candidateRows,P)||reconciled;
-     // Dernière tentative, uniquement sur les zones encore incomplètes.
-     // Réutiliser le cliché brut rehaussé (sans supprimer les traits fins).
-     // Ne jamais inférer une carte à partir de la seule longueur d'une main.
+     // V36: photo perspective can vertically clip whole card lines.
+     // Keep prior OCR candidates, read only missing-suit rows and require review.
      if(reconciled&&((!reconciled.validation.complete&&!reconciled.inferred)||reconciled.orderWarnings?.length)){
-      const remaining=new Set(P.seats.filter(s=>
-       reconciled.validation.counts[s]!==13));
-      const doubtful=new Set((reconciled.orderWarnings||[]).map(x=>x.suit));
+      const remaining=new Set(P.seats.filter(seat=>
+       reconciled.validation.counts[seat]!==13));
+      const missingSuits=new Set(reconciled.validation.missing.map(card=>card[0]));
+      const doubtful=new Set([
+       ...(reconciled.orderWarnings||[]).map(x=>x.suit),
+       ...reconciled.validation.duplicates.map(card=>card[0])
+      ]);
       const finalRows=candidateRows.filter(r=>
-       remaining.has(r.seat)||doubtful.has(r.suit));
-      await worker.setParameters({tessedit_pageseg_mode:"13"});
-      let i=0;
-      for(const entry of finalRows){
+       (remaining.has(r.seat)&&missingSuits.has(r.suit))||
+       doubtful.has(r.suit)).sort((a,b)=>
+        a.options[0].value.length-b.options[0].value.length);
+      const retries=[
+       {direction:0,mode:"gray",psm:"7"},
+       {direction:-1,mode:"low",psm:"8"},
+       {direction:1,mode:"gray",psm:"13"}
+      ];
+      let currentPsm="7",i=0;
+      for(const entry of finalRows)for(const retry of retries){
        ensureCurrent(generation);
-       setStatus("Contrôle des caractères fins… "+(++i)+"/"+finalRows.length);
-       const rect=P.cropForRow(entry.header,entry.row,source.width,source.height);
-       const variants=[rect,shiftCrop(rect,Math.round(-entry.header.w*.075),source.width)];
-       for(const shape of variants){
-        const photo=cropPhotoGrayscale(source,shape);
-        const answer=await worker.recognize(photo);
-        ensureCurrent(generation);
-        const normalized=P.normalize(answer.data?.text,true);
-        if(!normalized.invalid&&normalized.value.length<=13&&
-           new Set(normalized.value).size===normalized.value.length&&
-           !entry.options.some(opt=>opt.value===normalized.value))
-         entry.options.push({value:normalized.value,
-          confidence:Number(answer.data?.confidence)||0});
+       setStatus("Récupération des lignes incomplètes… "+(++i)+"/"+
+        (finalRows.length*retries.length));
+       if(currentPsm!==retry.psm){
+        await worker.setParameters({tessedit_pageseg_mode:retry.psm});
+        currentPsm=retry.psm;
        }
+       const rect=P.cropForRowRetry(entry.header,entry.row,
+        source.width,source.height,retry.direction);
+       if(rect.h<=0||rect.w<=0)continue;
+       const photo=retry.mode==="gray"
+        ?cropPhotoGrayscale(source,rect,true)
+        :cropCanvas(source,rect,true,"low");
+       const answer=await worker.recognize(photo);
+       ensureCurrent(generation);
+       const normalized=P.normalize(answer.data?.text,true);
+       if(!normalized.invalid&&normalized.value.length<=13&&
+          new Set(normalized.value).size===normalized.value.length&&
+          !entry.options.some(opt=>opt.value===normalized.value))
+        entry.options.push({value:normalized.value,
+         confidence:Number(answer.data?.confidence)||0});
       }
-      await worker.setParameters({tessedit_pageseg_mode:"7"});
+      if(currentPsm!=="7")await worker.setParameters({tessedit_pageseg_mode:"7"});
       ensureCurrent(generation);
       reconciled=window.BridgeOCRReconcile?.choose(candidateRows,P)||reconciled;
      }
