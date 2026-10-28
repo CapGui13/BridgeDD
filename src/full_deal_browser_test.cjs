@@ -105,6 +105,12 @@ test("52 actual legal card plays, optimal moves, undo, end of deal",{
     "'][data-direction='"+seat+"']");
    if(!button||button.disabled)throw Error("Undo last card not playable");
    button.click();
+   const picker=document.getElementById("bridge-card-picker");
+   if(picker&&!picker.hidden){
+    const choice=picker.querySelector('.bridge-card-choice[data-card="'+key+'"]');
+    if(!choice)throw Error("Last card missing from the touch picker");
+    choice.click();
+   }
    return {count:window.playState.history.length,
     complete:window.isPlayHistoryComplete(window.playState)};
   });
