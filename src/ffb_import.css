@@ -67,3 +67,19 @@
  font-size:14px!important;font-weight:700!important;
  border-radius:10px!important;cursor:pointer;
 }
+
+/* V25 — Revenir à la photothèque sans rester bloqué dans l'OCR. */
+.ffb-head{
+ position:sticky;top:-12px;z-index:2;background:#fff;
+ padding:4px 0 10px;flex-wrap:wrap;
+}
+.ffb-head strong{flex-basis:100%;font-size:17px}
+#ffb-choose-another{
+ background:#e5edff!important;border:1px solid #9db7dc!important;
+ color:#234a86!important;font-weight:750!important;
+ flex:1 1 170px;min-height:44px!important;
+}
+#ffb-close{
+ background:#f5f7fc!important;color:#314969!important;
+ min-height:44px!important;flex:0 0 auto;
+}
