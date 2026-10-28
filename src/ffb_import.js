@@ -168,6 +168,46 @@ function baseCanvas(image){
  ctx.drawImage(image,0,0,canvas.width,canvas.height);
  return canvas;
 }
+/* Détecter les rangs visibles à l'intérieur d'une bande photo, sans utiliser
+   les nombres de cartes attendus ou un jeu particulier. */
+function trimPhotoInk(canvas){
+ const context=canvas.getContext("2d",{willReadFrequently:true});
+ const {width:w,height:h}=canvas;
+ if(!w||!h)return canvas;
+ const rgba=context.getImageData(0,0,w,h).data;
+ const cols=new Uint16Array(w),rows=new Uint16Array(h);
+ for(let y=2;y<h-2;y++)for(let x=0;x<w;x++){
+  const i=(y*w+x)*4;
+  if(rgba[i]<100){cols[x]++;rows[y]++;}
+ }
+ const runs=[];
+ let start=-1;
+ for(let x=0;x<=w;x++){
+  if(x<w&&cols[x]>=3){if(start<0)start=x;}
+  else if(start>=0){runs.push({start,end:x-1});start=-1;}
+ }
+ if(!runs.length)return canvas;
+ let left=runs[0].start;
+ // Des bouts de symboles ♠/♥/♦/♣ peuvent être au bord gauche du
+ // cadrage. Un premier fragment étroit suivi d'une grande séparation
+ // n'appartient pas aux rangs de cartes.
+ if(runs.length>1&&runs[0].start<=3&&
+    runs[0].end-runs[0].start<15&&
+    runs[1].start-runs[0].end>=8)
+  left=runs[1].start;
+ const right=runs[runs.length-1].end;
+ if(right-left<3)return canvas;
+ let top=0,bottom=h-1;
+ for(let y=0;y<h;y++)if(rows[y]>=3){top=y;break;}
+ for(let y=h-1;y>=0;y--)if(rows[y]>=3){bottom=y;break;}
+ const x0=Math.max(0,left-5),y0=Math.max(0,top-5);
+ const x1=Math.min(w,right+7),y1=Math.min(h,bottom+6);
+ if(x1-x0<5||y1-y0<8)return canvas;
+ const output=document.createElement("canvas");
+ output.width=x1-x0;output.height=y1-y0;
+ output.getContext("2d").drawImage(canvas,x0,y0,output.width,output.height,0,0,output.width,output.height);
+ return output;
+}
 function cropCanvas(image,rect,photo=false,alternate=false) {
  if(!rect.w||!rect.h)throw new Error("Cadrage des cartes invalide.");
  // Pour une photo d'écran, binariser AVANT d'agrandir les pixels :
@@ -222,15 +262,20 @@ function cropCanvas(image,rect,photo=false,alternate=false) {
   pix.data[j+3]=255;
  }
  ctx.putImageData(pix,0,0);
- const pad=12;
+ // En photographiant un écran, la largeur des cartes est souvent
+ // inférieure à la moitié de la zone de lecture. Des centaines de pixels
+ // blancs détournent le segmentateur de Tesseract sur Safari : réduire la
+ // zone au vrai groupe de glyphes, tout en conservant une marge blanche.
+ const trimmed=trimPhotoInk(canvas);
+ const pad=14;
  const zoom=document.createElement("canvas");
- zoom.width=canvas.width*3+pad*2;
- zoom.height=canvas.height*3+pad*2;
+ zoom.width=trimmed.width*3+pad*2;
+ zoom.height=trimmed.height*3+pad*2;
  const zoomCtx=zoom.getContext("2d",{willReadFrequently:true});
  zoomCtx.fillStyle="white";
  zoomCtx.fillRect(0,0,zoom.width,zoom.height);
  zoomCtx.imageSmoothingEnabled=false;
- zoomCtx.drawImage(canvas,pad,pad,canvas.width*3,canvas.height*3);
+ zoomCtx.drawImage(trimmed,pad,pad,trimmed.width*3,trimmed.height*3);
  return zoom;
 }
 /* FFB overlays the card just played with a blue disk and white rank.
@@ -552,7 +597,7 @@ function init(){
  $("ffb-apply").addEventListener("click",applyDeal);
  repaintForm();
 }
-window.BridgeFFBImport={openReview};
+window.BridgeFFBImport={openReview,trimPhotoInk};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();

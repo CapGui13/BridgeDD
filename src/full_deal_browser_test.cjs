@@ -364,3 +364,34 @@ test("Monitor photo geometry is recognized in canvas even with colored pixel int
   assert.equal(found[3].inferred,undefined);
  }finally{await browser.close();}
 });
+
+test("OCR photo crop: trim blank area while preserving all visible digits",{
+ timeout:120000
+},async()=>{
+ const browser=await chromium.launch({
+  headless:true,executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]
+ });
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:667},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000
+  });
+  await page.waitForFunction(()=>!!window.BridgeFFBImport?.trimPhotoInk,null,{timeout:45000});
+  const stats=await page.evaluate(()=>{
+   const source=document.createElement("canvas");
+   source.width=330;source.height=60;
+   const c=source.getContext("2d");
+   c.fillStyle="#fff";c.fillRect(0,0,330,60);
+   c.fillStyle="#000";c.font="bold 28px Arial";
+   c.fillText("97432",26,42);
+   const trimmed=window.BridgeFFBImport.trimPhotoInk(source);
+   const p=trimmed.getContext("2d").getImageData(0,0,trimmed.width,trimmed.height).data;
+   let count=0;for(let i=0;i<p.length;i+=4)if(p[i]<100)count++;
+   return {from:source.width,to:trimmed.width,height:trimmed.height,black:count};
+  });
+  assert.ok(stats.to<140,"Blank area is removed: "+JSON.stringify(stats));
+  assert.ok(stats.to>65&&stats.black>150,
+   "All glyphs remain in photo crop: "+JSON.stringify(stats));
+ }finally{await browser.close();}
+});
