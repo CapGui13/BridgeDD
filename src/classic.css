@@ -186,3 +186,21 @@
    opacity:1!important;
  }
 }
+
+/* V23 — Nord et Sud partagent la même largeur : symboles alignés sur 4 lignes.
+   Le centre de cette largeur fixe reste celui de la boussole. */
+@media(max-width:650px){
+ .grid-container{grid-template-columns:minmax(0,1fr) minmax(52px,16%) minmax(0,1fr)!important}
+ .grid-item.hand-north,.grid-item.hand-south{
+   width:min(80%,320px)!important;
+   max-width:100%!important;
+   justify-self:center!important;
+   align-self:center!important;
+ }
+ .grid-item.hand-west{justify-self:end!important}
+ .grid-item.hand-east{justify-self:start!important}
+ .grid-item .hand-suit{min-height:36px!important}
+ .grid-item .hand-holding>.hand-card{min-height:36px!important;height:36px!important}
+ body.playing .grid-item .hand-suit{cursor:pointer!important}
+ body.playing .grid-item .hand-suit>.hand-holding{cursor:pointer!important}
+}

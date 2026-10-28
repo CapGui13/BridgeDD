@@ -183,3 +183,25 @@ body.bridge-wizard #deck-status{display:none!important}
  padding:5px 12px!important;font-weight:700!important;
  margin:8px 0 0!important;
 }
+
+/* Palette tactile des cartes — activée uniquement pendant le jeu sur mobile. */
+#bridge-card-picker[hidden]{display:none!important}
+#bridge-card-picker{position:fixed;inset:0;z-index:9800;color:#1e3052}
+.bridge-card-backdrop{position:absolute;inset:0;background:rgba(15,27,45,.6)}
+.bridge-card-sheet{
+ position:absolute;left:10px;right:10px;bottom:max(14px,env(safe-area-inset-bottom,0px));
+ max-width:520px;margin:0 auto;background:#fff;border-radius:16px;
+ padding:16px;box-shadow:0 12px 42px #12213955;
+}
+.bridge-card-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:18px}
+#bridge-card-close{width:42px;height:42px;border:1px solid #c5d3e6;border-radius:9px;background:#eff3fa;color:#1f345b}
+.bridge-card-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(50px,1fr));gap:9px;margin:15px 0 10px}
+.bridge-card-options .bridge-card-choice{
+ min-width:48px;min-height:52px;border-radius:10px;
+ border:1px solid #b8c8e0;background:#f5f7fc;color:#0c1d39;
+ font-size:24px;font-weight:750;touch-action:manipulation;
+}
+.bridge-card-options .bridge-card-best{color:#008e32;border-color:#9ed9ac;background:#f0fff3}
+.bridge-card-options .bridge-card-other{color:#080808}
+.bridge-card-help{font-size:12px;color:#60718a;margin:8px 0 0;text-align:center}
+body.bridge-card-picking{overflow:hidden}
