@@ -419,3 +419,33 @@ test("V31: alternative photo crops can add left margin and avoid overflow",{
   assert.equal(r.bound.x,0);
  }finally{await browser.close();}
 });
+
+test("Photo moire speckles do not extend OCR crop beyond the actual ranks",{
+ timeout:120000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:667},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>window.BridgeFFBImport?.trimPhotoInk,null,{timeout:45000});
+  const result=await page.evaluate(()=>{
+   const source=document.createElement("canvas");source.width=360;source.height=58;
+   const ctx=source.getContext("2d");
+   ctx.fillStyle="white";ctx.fillRect(0,0,360,58);
+   ctx.fillStyle="black";ctx.font="bold 29px Arial";ctx.fillText("A 8 6 4",26,39);
+   // Noise persists in the empty right half, spanning many columns.
+   for(let x=180;x<359;x+=11){
+    for(let y=3;y<53;y+=10)ctx.fillRect(x,y,1,1);
+   }
+   // A cropped suit fragment should not influence rank detection.
+   ctx.fillRect(0,12,2,16);
+   const output=window.BridgeFFBImport.trimPhotoInk(source);
+   return {from:source.width,to:output.width,height:output.height};
+  });
+  assert.ok(result.to<150,JSON.stringify(result));
+  assert.ok(result.to>90,JSON.stringify(result));
+ }finally{await browser.close();}
+});
