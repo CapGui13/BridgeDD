@@ -262,3 +262,36 @@ test("User monitor-photo OCR 50/52 is safely restored by known fourth hand",()=>
   south:{S:"R105",H:"V94",D:"RV632",C:"R9"}
  }),true);
 });
+
+test("FFB suit ranks are sorted descending without adding or removing cards",()=>{
+ const samples=[
+  ["10V","V10"],["943DR","RD943"],["6R10","R106"],
+  ["A V 10 9","AV109"],["RD943","RD943"]
+ ];
+ for(const [read,expected] of samples){
+  const info=p.orderInfo(read,true);
+  assert.equal(p.toFrench(info.sorted).replaceAll(" ",""),expected,read);
+  assert.equal(info.value.length,info.sorted.length);
+ }
+ const issue=p.orderInfo("10V",true);
+ assert.equal(issue.outOfOrder,true);
+ assert.equal(p.orderInfo("V10",true).outOfOrder,false);
+ const invalid=p.orderInfo("R99",true);
+ assert.equal(invalid.valid,false);
+ assert.equal(invalid.sorted,"K99","Do not silently fix duplicates");
+});
+test("Sorting a 52-card deal does not fix rank swaps between seats",()=>{
+ const wrong={
+  north:{S:"Q86",H:"KT6",D:"AQ",C:"KQ943"},
+  west:{S:"97432",H:"8532",D:"75",C:"75"},
+  east:{S:"AJ",H:"AQ7",D:"T984",C:"A862"},
+  south:{S:"KT5",H:"J94",D:"KJ632",C:"TJ"}
+ };
+ const sorted=p.orderedHands(wrong);
+ assert.equal(sorted.south.C,"JT");
+ assert.equal(p.validate(sorted).complete,true);
+ assert.equal(p.sameDistribution(sorted,{
+  ...wrong,north:{...wrong.north,C:"QJT43"},
+  south:{...wrong.south,C:"K9"}
+ }),false);
+});

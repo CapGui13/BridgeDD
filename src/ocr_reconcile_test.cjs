@@ -104,3 +104,31 @@ test("V31: a sole OCR guess still cannot synthesize missing cards",()=>{
  assert.equal(check.validation.complete,false);
  assert.ok(check.validation.missing.length>0);
 });
+
+test("A complete but wrongly swapped 52-card deal is rejected in favor of ordered OCR alternatives",()=>{
+ const source={
+  north:{S:"Q86",H:"KT6",D:"AQ",C:"QJT43"},
+  west:{S:"97432",H:"8532",D:"75",C:"75"},
+  east:{S:"AJ",H:"AQ7",D:"T984",C:"A862"},
+  south:{S:"KT5",H:"J94",D:"KJ632",C:"K9"}
+ };
+ const rows=P.seats.flatMap(seat=>P.suits.map(suit=>({
+  seat,suit,options:[{value:source[seat][suit],confidence:70}]
+ })));
+ const n=rows.find(x=>x.seat==="north"&&x.suit==="C");
+ const s=rows.find(x=>x.seat==="south"&&x.suit==="C");
+ n.options=[{value:"KQ943",confidence:95},{value:"QJT43",confidence:68}];
+ s.options=[{value:"TJ",confidence:96},{value:"K9",confidence:67}];
+ const chosen=R.choose(rows,P);
+ assert.ok(chosen.validation.complete);
+ assert.equal(P.sameDistribution(chosen.hands,source),true);
+ assert.equal(chosen.orderWarnings.length,0);
+});
+test("An uncorrected OCR inversion is sorted but explicitly flagged for human review",()=>{
+ const rows=candidates();
+ const t=rows.find(x=>x.seat==="south"&&x.suit==="C");
+ t.options=[{value:"9K",confidence:100}];
+ const result=R.choose(rows,P);
+ assert.equal(result.hands.south.C,"K9");
+ assert.ok(result.orderWarnings.some(x=>x.seat==="south"&&x.suit==="C"));
+});

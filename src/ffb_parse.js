@@ -21,6 +21,25 @@ function normalize(text,ocr=false){
  raw=raw.replace(/10/g,"T").replace(/R/g,"K").replace(/D/g,"Q").replace(/V/g,"J");
  return {value:raw,invalid:raw.replace(/[AKQJT2-9]/g,"")};
 }
+// Les diagrammes FFB montrent toujours les honneurs puis les petites
+// cartes par ordre décroissant. Pour l'OCR, conserver l'information
+// « lecture hors ordre » AVANT le tri : elle signale une erreur possible.
+function orderInfo(text,ocr=false){
+ const parsed=normalize(text,ocr);
+ const distinct=new Set(parsed.value).size===parsed.value.length;
+ const valid=!parsed.invalid&&distinct;
+ const sorted=valid?[...parsed.value].sort(
+  (a,b)=>ranks.indexOf(a)-ranks.indexOf(b)).join(""):parsed.value;
+ return {value:parsed.value,sorted,valid,
+  outOfOrder:valid&&parsed.value!==sorted,
+  duplicates:!distinct,invalid:parsed.invalid};
+}
+function orderedHands(hands){
+ const result=empty();
+ for(const seat of seats)for(const suit of suits)
+  result[seat][suit]=orderInfo(hands?.[seat]?.[suit]||"").sorted;
+ return result;
+}
 function empty(){return Object.fromEntries(seats.map(seat=>[seat,{S:"",H:"",D:"",C:""}]));}
 function validate(hands){
  const counts={}, duplicates=[], unknown=[], seen=new Map();
@@ -177,7 +196,7 @@ function cropForRow(header,row,imWidth,imHeight){
  const y1=Math.min(imHeight,Math.round(y+h+h*((header.photo?.47:.56)+row*.445)));
  return {x:x0,y:y0,w:Math.max(0,x1-x0),h:Math.max(0,y1-y0)};
 }
-const api={seats,suits,ranks,normalize,toFrench,empty,validate,completeFourthHand,sameDistribution,detectGreenHeaders,detectFFBHeaders,cropForRow};
+const api={seats,suits,ranks,normalize,orderInfo,orderedHands,toFrench,empty,validate,completeFourthHand,sameDistribution,detectGreenHeaders,detectFFBHeaders,cropForRow};
 root.BridgeFFB=api;
 if(typeof module==="object"&&module.exports)module.exports=api;
 })(typeof globalThis!=="undefined"?globalThis:this);
