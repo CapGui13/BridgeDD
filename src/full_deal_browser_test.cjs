@@ -113,3 +113,86 @@ test("52 actual legal card plays, optimal moves, undo, end of deal",{
   await page.close();
  }finally{await browser.close();}
 });
+
+test("iPhone geometry, optional 52-card review, and playable suit picker",{
+ timeout:120000
+},async()=>{
+ const browser=await chromium.launch({
+  headless:true,executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]
+ });
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:667},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000
+  });
+  await page.waitForFunction(()=>window.crossOriginIsolated===true&&
+   !!window.BridgeFFBImport?.openReview&&typeof window.startPlay==="function",null,{timeout:45000});
+  await page.evaluate(()=>{
+   const P=window.BridgeFFB;
+   const deal=[
+    ["AKQ762","84","K86","62"],
+    ["T83","JT7","AJT2","KT7"],
+    ["954","AQ93","3","A9854"],
+    ["J","K652","Q9754","QJ3"]
+   ].map(row=>row.map(x=>P.normalize(x).value).join("."));
+   window.fillFormWithTestData(deal);
+   window.dispatchEvent(new CustomEvent("bridge:deal-imported",{detail:{source:"test"}}));
+  });
+  assert.equal(await page.locator("#bridge-verify-deal").isVisible(),true);
+  await page.locator("#bridge-verify-deal").click();
+  assert.equal(await page.locator("#ffb-dialog").isVisible(),true);
+  assert.match(await page.locator("#ffb-validation").innerText(),/Donne valide/);
+  const north=page.locator('#ffb-hands input[data-seat="north"][data-suit="S"]');
+  const original=await north.inputValue();
+  await north.fill(original.replace("A",""));
+  assert.equal(await page.locator("#ffb-apply").isDisabled(),true);
+  await page.locator("#ffb-close").click();
+  await page.locator("#bridge-verify-deal").click();
+  assert.equal(await page.locator('#ffb-hands input[data-seat="north"][data-suit="S"]').inputValue(),original,
+   "Cancelling review must restore previous confirmed hand");
+  await page.locator("#ffb-close").click();
+  await page.locator("#coach-start").click();
+  const geom=await page.evaluate(()=>{
+   const rect=s=>document.querySelector(s)?.getBoundingClientRect().toJSON();
+   const n=rect(".grid-item.hand-north"),s=rect(".grid-item.hand-south"),
+   w=rect(".grid-item.hand-west"),e=rect(".grid-item.hand-east"),
+   c=rect(".bridge-compass"),outer=rect(".grid-outer");
+   return {n,s,w,e,c,outer,viewport:window.innerWidth,
+    scrollWidth:document.documentElement.scrollWidth};
+  });
+  assert.ok(geom.n&&geom.s&&geom.w&&geom.e&&geom.c,
+   "All four hands and compass are rendered");
+  assert.ok(Math.abs(geom.n.x-geom.s.x)<=3,"N/S suit labels must line up");
+  assert.ok(Math.abs((geom.n.x+geom.n.width/2)-(geom.c.x+geom.c.width/2))<=4,
+   "North center must match compass center");
+  assert.ok(Math.abs((geom.s.x+geom.s.width/2)-(geom.c.x+geom.c.width/2))<=4,
+   "South center must match compass center");
+  assert.ok(geom.w.right<=geom.c.x+5,
+   "West must stay on the west side of compass");
+  assert.ok(geom.e.x>=geom.c.right-5,
+   "East must stay on the east side of compass");
+  assert.ok(geom.scrollWidth<=geom.viewport+2,
+   "No horizontal scrolling on iPhone");
+  await page.waitForFunction(()=>window.playState?.pendingDiffs&&
+   Object.keys(window.playState.pendingDiffs).length>0,null,{timeout:30000});
+  const chosen=await page.evaluate(()=>{
+   const state=window.playState,seat=window.replayPlayState(state).seat;
+   const button=[...document.querySelectorAll('.hand-card.hand-card-playable')]
+    .find(el=>el.dataset.direction===seat&&!el.disabled);
+   if(!button)throw Error("No legal playing card");
+   const row=button.closest(".hand-suit");
+   row.click(); // tapping the suit should open the large-card picker
+   const modal=document.getElementById("bridge-card-picker");
+   const item=modal.querySelector(".bridge-card-choice");
+   if(modal.hidden||!item)throw Error("Touch picker did not open");
+   const h=item.getBoundingClientRect().height;
+   item.click();
+   return {height:h,history:window.playState.history.length,closed:modal.hidden};
+  });
+  assert.ok(chosen.height>=44,"Touch choices must be at least 44px high");
+  assert.equal(chosen.history,1);
+  assert.equal(chosen.closed,true);
+  await page.close();
+ }finally{await browser.close();}
+});
