@@ -180,6 +180,25 @@ test("iPhone geometry, optional 52-card review, and playable suit picker",{
    "East must stay on the east side of compass");
   assert.ok(geom.scrollWidth<=geom.viewport+2,
    "No horizontal scrolling on iPhone");
+  for(const width of [320,414]){
+   await page.setViewportSize({width,height:667});
+   const responsive=await page.evaluate(()=>new Promise(resolve=>
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+     const box=selector=>document.querySelector(selector).getBoundingClientRect();
+     const n=box(".grid-item.hand-north"),s=box(".grid-item.hand-south"),
+      c=box(".bridge-compass");
+     resolve({width:innerWidth,scroll:document.documentElement.scrollWidth,
+      alignment:Math.abs(n.x-s.x),
+      northOffset:Math.abs(n.x+n.width/2-c.x-c.width/2),
+      southOffset:Math.abs(s.x+s.width/2-c.x-c.width/2)});
+    }))));
+   assert.ok(responsive.alignment<=3,"N/S alignment at "+width+"px");
+   assert.ok(responsive.northOffset<=4&&responsive.southOffset<=4,
+    "Compass center at "+width+"px");
+   assert.ok(responsive.scroll<=responsive.width+2,
+    "No overflow at "+width+"px: "+JSON.stringify(responsive));
+  }
+  await page.setViewportSize({width:375,height:667});
   await page.waitForFunction(()=>window.playState?.pendingDiffs&&
    Object.keys(window.playState.pendingDiffs).length>0,null,{timeout:30000});
   const chosen=await page.evaluate(()=>{
