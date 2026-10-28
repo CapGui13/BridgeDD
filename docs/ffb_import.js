@@ -9,23 +9,43 @@ const seatNames={north:"Nord",east:"Est",south:"Sud",west:"Ouest"};
 const seatOrder=["north","west","east","south"];
 const suitOrder=["S","H","D","C"];
 let hands=P.empty(), busy=false, imageUrl=null;
-let reviewSnapshot=null,lastInferred=null;
+let reviewSnapshot=null,lastInferred=null,recognitionGeneration=0;
 const $=id=>document.getElementById(id);
 function setStatus(message){$("ffb-status").textContent=message;}
 function setBusy(value){
- busy=value;$("ffb-file").disabled=value;
- $("ffb-select").disabled=value;
+ busy=value;
+ // Ne pas bloquer le sélecteur de fichiers pendant une OCR longue.
+ $("ffb-file").disabled=false;
+ $("ffb-select").disabled=false;
  $("ffb-apply").disabled=value||!P.validate(hands).complete;
+ $("ffb-choose-another").disabled=false;
+ $("ffb-close").disabled=false;
+}
+function cancelRecognition(){
+ // Toute opération asynchrone précédente devient immédiatement caduque.
+ recognitionGeneration++;
+ setBusy(false);
 }
 function closeDialog(){
- if(busy)return;
+ cancelRecognition();
  $("ffb-dialog").hidden=true;
+ $("ffb-file").value="";
  if(reviewSnapshot){
   hands=reviewSnapshot;
   reviewSnapshot=null;
   repaintForm();
  }
  // Conserver l'aperçu tant que l'on peut vérifier la donne importée.
+}
+function chooseAnotherPhoto(){
+ cancelRecognition();
+ $("ffb-file").value="";
+ setStatus("Choisis une autre photo dans ta photothèque.");
+ // iOS exige un clic direct depuis le geste de l'utilisateur.
+ $("ffb-file").click();
+}
+function ensureCurrent(generation){
+ if(generation!==recognitionGeneration)throw new Error("Reconnaissance annulée.");
 }
 function showDialog(){
  $("ffb-dialog").hidden=false;
@@ -196,7 +216,8 @@ function addScript(){
 function workerPath(part){
  return new URL("ocr/"+part,document.baseURI).href.replace(/\/$/,"");
 }
-async function readFFB(source,headers){
+async function readFFB(source,headers,generation){
+ ensureCurrent(generation);
  // Priorité au lecteur de glyphes FFB : plus rapide et testé sur les
  // 8 captures reçues. On garde l'OCR généraliste comme repli.
  let specialized=null;
@@ -216,8 +237,9 @@ async function readFFB(source,headers){
   return {hands:specialized.hands,requiresReview:false,reason:""};
  }
  setStatus("Deuxième lecture des cartes pour vérifier les cas difficiles…");
- try { await addScript(); }
+ try { await addScript();ensureCurrent(generation); }
  catch(err){
+  ensureCurrent(generation);
   if(specialized?.readCount===16){
    setStatus("Lecture partielle : vérifie et complète les cartes.");
    return {hands:specialized.hands,requiresReview:true,reason:
@@ -229,17 +251,20 @@ async function readFFB(source,headers){
  let worker=null;
  const newHands=P.empty();
  try {
+  ensureCurrent(generation);
   worker=await window.Tesseract.createWorker("eng",1,{
    workerPath:workerPath("worker.min.js"),
    corePath:workerPath("core"),
    langPath:workerPath("lang"),
    workerBlobURL:false,
    logger:msg=>{
+    if(generation!==recognitionGeneration)return;
     if(msg.status==="loading language traineddata"){
       setStatus("Chargement du dictionnaire de reconnaissance…");
     }
    }
   });
+  ensureCurrent(generation);
   await worker.setParameters({
    tessedit_char_whitelist:"ARDVJQKT0123456789",
    tessedit_pageseg_mode:"7",
@@ -248,17 +273,20 @@ async function readFFB(source,headers){
   let done=0;
   for(const header of headers){
    for(let row=0;row<4;row++){
+    ensureCurrent(generation);
     done++;
     setStatus("Lecture des cartes… "+done+"/16");
     const rect=P.cropForRow(header,row,source.width,source.height);
     const cropped=cropCanvas(source,rect);
     const result=await worker.recognize(cropped);
+    ensureCurrent(generation);
     const parsed=P.normalize(result.data.text,true);
     // Ne pas inventer une valeur : la vérification finale est obligatoire.
     newHands[header.seat][suitOrder[row]]=parsed.value;
    }
   }
  } catch(err){
+  ensureCurrent(generation);
   if(specialized?.readCount===16){
    setStatus("Reconnaissance partielle : corrige les cartes non reconnues.");
    return {hands:specialized.hands,requiresReview:true,reason:
@@ -291,8 +319,10 @@ async function readFFB(source,headers){
     :"")};
 }
 async function handleFile(file) {
- if(!file||busy)return;
- // Ne jamais conserver les cartes de la précédente photo pendant la lecture.
+ if(!file)return;
+ // Si une image est sélectionnée pendant une autre lecture, seule
+ // la sélection la plus récente pourra modifier la donne.
+ const generation=++recognitionGeneration;
  hands=P.empty();
  lastInferred=null;
  reviewSnapshot=null;
@@ -303,6 +333,7 @@ async function handleFile(file) {
  try {
   if(!file.type.startsWith("image/"))throw new Error("Choisis une image depuis Photos.");
   const image=await loadImage(file);
+  ensureCurrent(generation);
   const canvas=baseCanvas(image),ctx=canvas.getContext("2d",{willReadFrequently:true});
   const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
   const headers=P.detectFFBHeaders(pixels);
@@ -313,7 +344,8 @@ async function handleFile(file) {
   imageUrl=URL.createObjectURL(file);
   $("ffb-preview-image").src=imageUrl;
   $("ffb-image-details").hidden=false;
-  const reading=await readFFB(canvas,headers);
+  const reading=await readFFB(canvas,headers,generation);
+  ensureCurrent(generation);
   hands=reading.hands;
   const inferred=P.completeFourthHand(hands);
   if(inferred.completed){
@@ -332,10 +364,15 @@ async function handleFile(file) {
    setStatus("Reconnaissance partielle : corrige les cartes avant de charger la donne.");
   }
  }catch(err){
-  setStatus("Reconnaissance impossible : "+(err?.message||"erreur inconnue")+". Tu peux choisir une autre capture.");
+  if(generation===recognitionGeneration)
+   setStatus("Reconnaissance impossible : "+(err?.message||"erreur inconnue")+
+    ". Appuie sur « Choisir une autre photo » pour revenir à ta photothèque.");
  }finally{
-  setBusy(false);updateValidation();
+  if(generation===recognitionGeneration){
+   setBusy(false);updateValidation();
+  }
  }
+ if(generation!==recognitionGeneration)return;
  if(importAutomatically){
   try{
    applyDeal();
@@ -378,7 +415,8 @@ function init(){
  modal.innerHTML=`<div class="ffb-scrim"></div>
  <div class="ffb-sheet" role="dialog" aria-modal="true" aria-labelledby="ffb-title">
   <div class="ffb-head"><strong id="ffb-title">Importer une capture FFB</strong>
-   <button type="button" id="ffb-close">Fermer</button></div>
+   <button type="button" id="ffb-choose-another">← Choisir une autre photo</button>
+   <button type="button" id="ffb-close">Annuler</button></div>
   <p id="ffb-status" role="status">Sélectionne une capture d'écran FFB.</p>
   <details id="ffb-image-details" hidden><summary>Voir la capture</summary>
    <img alt="Capture d'écran sélectionnée" id="ffb-preview-image"></details>
@@ -393,6 +431,7 @@ function init(){
  </div>`;
  document.body.appendChild(modal);
  $("ffb-close").addEventListener("click",closeDialog);
+ $("ffb-choose-another").addEventListener("click",chooseAnotherPhoto);
  input.addEventListener("change",()=>handleFile(input.files?.[0]));
  $("ffb-apply").addEventListener("click",applyDeal);
  repaintForm();
