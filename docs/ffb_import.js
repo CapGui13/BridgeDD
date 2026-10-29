@@ -1059,8 +1059,13 @@ async function handleFile(file) {
   $("ffb-preview-image").src=imageUrl;
   $("ffb-image-details").hidden=false;
   let headers=P.detectFFBHeaders(pixels);
+  const suitMarkers=window.BridgeSuitLocator?.detect(pixels)||[];
   if(headers.length!==4){
-   headers=window.BridgeSuitLocator?.detect(pixels)||[];
+   headers=suitMarkers;
+  }else if(suitMarkers.length===4){
+   // V47: Recalibrate only inferred N/S headers from ♥/♦ landmarks.
+   // In a void South hand the old vertical shift puts hearts into spades.
+   headers=window.BridgeFFBHeaderRefine?.refine(headers,suitMarkers)||headers;
   }
   if(headers.length===4){
    const bySuits=headers.some(header=>header.recoveredFromPips);
@@ -1198,7 +1203,7 @@ function init(){
  repaintForm();
  syncBoardControls();
 }
-window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V45"};
+window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V47"};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();
