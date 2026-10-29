@@ -508,12 +508,13 @@ test("Accueil V38: camera and phototheque use independent image pickers",{
    serviceWorkers:"allow"});
   await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
    waitUntil:"domcontentloaded",timeout:40000});
-  await page.waitForSelector("#ffb-import-actions", {timeout:45000});
+  await page.waitForSelector("#bridge-upload-camera",{timeout:45000});
+  await page.waitForSelector("#bridge-upload-gallery",{timeout:45000});
   const ui=await page.evaluate(()=>{
    const camera=document.getElementById("ffb-camera-file");
    const gallery=document.getElementById("ffb-file");
-   const cameraButton=document.getElementById("ffb-camera");
-   const galleryButton=document.getElementById("ffb-select");
+   const cameraButton=document.getElementById("bridge-upload-camera");
+   const galleryButton=document.getElementById("bridge-upload-gallery");
    const clicks=[];
    // Intercept native file pickers without needing a physical iPhone.
    camera.click=()=>clicks.push("camera");

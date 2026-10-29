@@ -18,8 +18,6 @@ function setBusy(value){
  // Ne pas bloquer le sélecteur de fichiers pendant une OCR longue.
  $("ffb-file").disabled=false;
  $("ffb-camera-file").disabled=false;
- $("ffb-select").disabled=false;
- $("ffb-camera").disabled=false;
  $("ffb-apply").disabled=value||!P.validate(hands).complete;
  $("ffb-choose-another").disabled=false;
  $("ffb-close").disabled=false;
@@ -857,23 +855,9 @@ function init(){
  cameraInput.type="file";cameraInput.accept="image/*";
  cameraInput.capture="environment";
  cameraInput.id="ffb-camera-file";cameraInput.hidden=true;
- const actions=document.createElement("div");
- actions.id="ffb-import-actions";
- actions.setAttribute("role","group");
- actions.setAttribute("aria-label","Importer une donne FFB");
- const cameraButton=document.createElement("button");
- cameraButton.type="button";cameraButton.id="ffb-camera";
- cameraButton.textContent="📷 Prendre une photo";
- cameraButton.title="Prendre une photo avec l'appareil photo";
- cameraButton.onclick=()=>{cameraInput.value="";cameraInput.click();};
- const galleryButton=document.createElement("button");
- galleryButton.type="button";galleryButton.id="ffb-select";
- galleryButton.textContent="🖼️ Photothèque";
- galleryButton.title="Choisir une photo existante";
- galleryButton.onclick=()=>{galleryInput.value="";galleryInput.click();};
- actions.append(cameraButton,galleryButton,galleryInput,cameraInput);
- const after=$("sample-deals");
- if(after)after.after(actions);else document.body.append(actions);
+ // The visible buttons live in the home wizard (#coach-toolbar), because
+ // the wizard hides all other top-level elements during photo import.
+ document.body.append(galleryInput,cameraInput);
  const modal=document.createElement("section");
  modal.id="ffb-dialog";modal.hidden=true;
  modal.innerHTML=`<div class="ffb-scrim"></div>
