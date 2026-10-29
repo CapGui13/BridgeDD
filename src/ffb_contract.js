@@ -132,8 +132,16 @@ function looksLikeSpade(canvas){
   return n/(Math.min(icon.h,end)-begin);
  };
  const top=avg(0,.12),middle=avg(.41,.63),stem=avg(.83,.96);
- if(middle<icon.w*.54||top>=middle*.27||
-    stem<=middle*.07||stem>=middle*.59)return false;
+ // FFB monitor captures have a large, narrow-stem spade, whereas
+ // Chromium's fallback Unicode font renders a shorter, broad-stem spade.
+ // Check both explicitly; neither resembles the mid-height diamond or
+ // the rounded three-lobed club. A stray '@' is never enough on its own.
+ const heightRatio=icon.h/digit.h,stemRatio=stem/middle;
+ const photoSpade=heightRatio>=.95&&stemRatio>.15&&stemRatio<.59;
+ const compactSpade=heightRatio>=.53&&heightRatio<.90&&
+  stemRatio>.72&&stemRatio<1.20;
+ if(middle<icon.w*.54||top>=middle*.30||
+    (!photoSpade&&!compactSpade))return false;
  let downward=0;
  for(let y=2;y<Math.floor(icon.h*.50);y++){
   if(widths[y+1]<widths[y]-Math.max(2,icon.w*.03))downward++;
