@@ -274,6 +274,52 @@ function cropPhotoGrayscale(image,rect,trim=false){
  dest.drawImage(textRegion,pad,pad,textRegion.width*4,textRegion.height*4);
  return out;
 }
+/* V40: a third, independently prepared photo OCR source. On LCD images,
+   hard binarization and trimming can discard thin/single-card glyphs.
+   Median-filter original RGB in grayscale, retain the full vertical region,
+   then resample in a padded high-resolution grayscale canvas.
+   This is deliberately an OCR alternative, not a forced 52-card completion. */
+function cropPhotoDenoised(image,rect){
+ if(rect.w<=0||rect.h<=0)return null;
+ const raw=document.createElement("canvas");
+ raw.width=Math.max(1,Math.round(rect.w));
+ raw.height=Math.max(1,Math.round(rect.h));
+ const context=raw.getContext("2d",{willReadFrequently:true});
+ context.fillStyle="#fff";
+ context.fillRect(0,0,raw.width,raw.height);
+ context.drawImage(image,rect.x,rect.y,rect.w,rect.h,0,0,raw.width,raw.height);
+ restoreBlueBadgeDigit(raw);
+ const imageData=context.getImageData(0,0,raw.width,raw.height);
+ const data=imageData.data,w=raw.width,h=raw.height;
+ const gray=new Uint8Array(w*h),med=new Uint8Array(w*h);
+ for(let i=0;i<gray.length;i++){
+  const j=i*4;
+  gray[i]=Math.round(.299*data[j]+.587*data[j+1]+.114*data[j+2]);
+ }
+ med.set(gray);
+ const neighbors=new Uint8Array(9);
+ for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+  let count=0;
+  for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)
+   neighbors[count++]=gray[(y+dy)*w+x+dx];
+  neighbors.sort();
+  med[y*w+x]=neighbors[4];
+ }
+ for(let i=0;i<gray.length;i++){
+  const j=i*4;
+  data[j]=data[j+1]=data[j+2]=med[i];
+  data[j+3]=255;
+ }
+ context.putImageData(imageData,0,0);
+ const result=document.createElement("canvas"),padding=25;
+ result.width=w*3+padding*2;result.height=h*3+padding*2;
+ const dest=result.getContext("2d");
+ dest.fillStyle="white";
+ dest.fillRect(0,0,result.width,result.height);
+ dest.imageSmoothingEnabled=true;dest.imageSmoothingQuality="high";
+ dest.drawImage(raw,padding,padding,w*3,h*3);
+ return result;
+}
 /* Photographic rank-only reading, with no suit symbols or LCD moire. */
 function cropPhotoRankInk(image,rect){
  if(rect.w<=0||rect.h<=0||!window.BridgePhotoRank)return null;
@@ -526,6 +572,29 @@ async function readFFB(source,headers,generation){
    }
    await worker.setParameters({tessedit_pageseg_mode:"7"});
    const first=P.validate(newHands);
+   const early=window.BridgeOCRReconcile?.choose(candidateRows,P);
+   // V40: use untrimmed median gray before the numerous expensive retry
+   // variants when the colour/threshold readers still miss many ranks.
+   // A complete reading is never changed solely to fill 52 cards.
+   if(!early?.validation?.complete&&
+      (early?.validation?.total??first.total)<44){
+    let count=0;
+    for(const entry of candidateRows){
+     ensureCurrent(generation);
+     setStatus("Lecture photo en niveaux de gris… "+(++count)+"/16");
+     const rect=P.cropForRow(entry.header,entry.row,source.width,source.height);
+     const crop=cropPhotoDenoised(source,rect);
+     if(!crop)continue;
+     const answer=await worker.recognize(crop);
+     ensureCurrent(generation);
+     const parsed=P.normalize(answer.data?.text,true);
+     if(!parsed.invalid&&parsed.value.length<=13&&
+        new Set(parsed.value).size===parsed.value.length&&
+        !entry.options.some(opt=>opt.value===parsed.value))
+      entry.options.push({value:parsed.value,
+       confidence:Number(answer.data?.confidence)||0});
+    }
+   }
    const inferred=P.completeFourthHand(newHands);
    if((!first.complete&&!inferred.completed)||
       candidateRows.some(r=>r.options.length>1||
@@ -773,7 +842,9 @@ async function handleFile(file) {
  repaintForm();
  setStatus("Analyse du screenshot FFB…");
  try {
-  if(!file.type.startsWith("image/"))throw new Error("Choisis une image depuis Photos.");
+  if(!file.type.startsWith("image/")&&
+     !/\.(heic|heif|jpg|jpeg|png|webp)$/i.test(file.name||""))
+   throw new Error("Choisis une image depuis Photos.");
   const image=await loadImage(file);
   ensureCurrent(generation);
   const canvas=baseCanvas(image),ctx=canvas.getContext("2d",{willReadFrequently:true});
@@ -803,7 +874,10 @@ async function handleFile(file) {
   if(reading.requiresReview){
    setStatus(reading.reason||"Vérifie les cartes avant de charger la donne.");
   }else if(!importAutomatically){
-   setStatus("Reconnaissance partielle : corrige les cartes avant de charger la donne.");
+   const recognized=P.validate(hands).total;
+   setStatus(recognized===0
+    ?"Les 4 joueurs ont été localisés, mais aucune carte n'a été lue (0/52). Envoie-moi cette indication pour diagnostiquer le moteur OCR."
+    :"Reconnaissance partielle : "+recognized+"/52 cartes lues. Corrige les cartes avant de charger la donne.");
   }
  }catch(err){
   if(generation===recognitionGeneration)
@@ -885,7 +959,7 @@ function init(){
  $("ffb-apply").addEventListener("click",applyDeal);
  repaintForm();
 }
-window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas};
+window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();

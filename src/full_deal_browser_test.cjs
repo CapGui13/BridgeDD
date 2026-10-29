@@ -541,3 +541,43 @@ test("Accueil V38: camera and phototheque use independent image pickers",{
   assert.ok(ui.bounds.every(x=>x.w>=120&&x.h>=44),JSON.stringify(ui.bounds));
  }finally{await browser.close();}
 });
+
+
+test("V40: grayscale OCR fallback preserves faint monitor characters and blue badges",{
+ timeout:90000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:800},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>!!window.BridgeFFBImport?.cropPhotoDenoised,null,{timeout:45000});
+  const answer=await page.evaluate(()=>{
+   const canvas=document.createElement("canvas");
+   canvas.width=310;canvas.height=62;
+   const ctx=canvas.getContext("2d");
+   ctx.fillStyle="rgb(207,204,199)";ctx.fillRect(0,0,310,62);
+   ctx.fillStyle="rgb(50,48,45)";
+   ctx.font="bold 29px Arial";ctx.fillText("A 10 7 3",32,41);
+   // Fine RGB LCD stripes; smoothing must remove them without losing text.
+   for(let x=0;x<310;x+=3){
+    ctx.fillStyle="rgba(210,10,10,.07)";
+    ctx.fillRect(x,0,1,62);
+   }
+   const result=window.BridgeFFBImport.cropPhotoDenoised(
+    canvas,{x:0,y:0,w:310,h:62});
+   const img=result.getContext("2d").getImageData(0,0,result.width,result.height);
+   let ink=0,gray=0;
+   for(let i=0;i<img.data.length;i+=4){
+    if(img.data[i]<100)ink++;
+    if(img.data[i]===img.data[i+1]&&img.data[i+1]===img.data[i+2])gray++;
+   }
+   return {width:result.width,height:result.height,ink,gray,total:result.width*result.height};
+  });
+  assert.ok(answer.ink>1000,JSON.stringify(answer));
+  assert.equal(answer.gray,answer.total);
+  assert.ok(answer.width>900&&answer.height>160);
+ }finally{await browser.close();}
+});
