@@ -183,6 +183,22 @@ function detectFFBHeaders(image){
  // Les photos d'écran sont plus petites dans le champ et peuvent avoir
  // une légère perspective : la seconde lecture OCR demande une vérification.
  const photo=width<w*.34;
+ // Pink photographed banners sometimes include a tinted halo above the
+ // actual rectangular header. Their tall colour bounding box otherwise
+ // causes each successive card-row crop to drift downward (and miss clubs).
+ // When both central banners are visible, use their more reliable height
+ // as the row-spacing reference, and align O/E to the lower banner top.
+ let correctedWest=west,correctedEast=east;
+ if(photo&&north&&south){
+  const typical=Math.round((north.h+south.h)/2);
+  const tallest=Math.max(west.h,east.h);
+  if(typical>0&&tallest>typical*1.13&&
+     Math.abs(west.y-east.y)<typical*.28){
+   const top=Math.max(west.y,east.y);
+   correctedWest={...west,y:top,h:typical};
+   correctedEast={...east,y:top,h:typical};
+  }
+ }
  // On a photographed green banner, the pale icon can split off the
  // leftmost part of the green component. In that case its narrow bbox
  // shifts the rank crop to the right and cuts the first honour.
@@ -197,8 +213,8 @@ function detectFFBHeaders(image){
  };
  return [
   {seat:"north",...(restoreBannerWidth(north)||{x:xMiddle,y:yMiddle-offset,w:width,h:height,inferred:true}),photo},
-  {seat:"west",...west,photo},
-  {seat:"east",...east,photo},
+  {seat:"west",...correctedWest,photo},
+  {seat:"east",...correctedEast,photo},
   {seat:"south",...(restoreBannerWidth(south)||{x:xMiddle,y:yMiddle+offset,w:width,h:height,inferred:true}),photo}
  ];
 }
