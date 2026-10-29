@@ -391,3 +391,42 @@ test("V39: overextended red monitor banner does not shift West clubs below crop"
  const club=p.cropForRow(found[1],3,w,h);
  assert.ok(club.h>0&&club.y<1200,JSON.stringify(club));
 });
+
+
+test("V42: missing pale O/E headers are inferred from two true green N/S banners",()=>{
+ const w=1000,h=1333,data=new Uint8ClampedArray(w*h*4);
+ for(let i=0;i<data.length;i+=4){
+  data[i]=190;data[i+1]=190;data[i+2]=188;data[i+3]=255;
+ }
+ function rect(x,y,width,height,r,g,b){
+  for(let cy=y;cy<y+height;cy++)for(let cx=x;cx<x+width;cx++){
+   const j=(cy*w+cx)*4;data[j]=r;data[j+1]=g;data[j+2]=b;
+  }
+ }
+ rect(371,123,273,108,21,110,42);
+ rect(385,759,253,95,27,115,47);
+ // The original FFB screen has salmon O/E rectangles, but in an
+ // overexposed phone photo they can become undetectable neutral gray.
+ rect(69,455,262,103,187,187,185);
+ rect(690,451,268,105,192,192,189);
+ const result=p.detectFFBHeaders({width:w,height:h,data});
+ assert.deepEqual(result.map(x=>x.seat),["north","west","east","south"]);
+ assert.ok(result[1].recoveredFromGreen&&result[2].recoveredFromGreen);
+ assert.ok(result[1].inferred&&result[2].inferred);
+ assert.equal(result[0].inferred,undefined);
+ assert.equal(result[3].inferred,undefined);
+ for(const header of result)for(let row=0;row<4;row++){
+  const crop=p.cropForRow(header,row,w,h);
+  assert.ok(crop.w>0&&crop.h>0,JSON.stringify({header,crop}));
+ }
+ assert.ok(Math.abs(result[1].x-69)<70,JSON.stringify(result[1]));
+ assert.ok(Math.abs(result[2].x-690)<80,JSON.stringify(result[2]));
+});
+
+test("V42: refuse invented player geometry without two reliable green anchors",()=>{
+ const w=1000,h=1333,data=new Uint8ClampedArray(w*h*4);
+ for(let i=0;i<data.length;i+=4){
+  data[i]=190;data[i+1]=190;data[i+2]=188;data[i+3]=255;
+ }
+ assert.deepEqual(p.detectFFBHeaders({width:w,height:h,data}),[]);
+});
