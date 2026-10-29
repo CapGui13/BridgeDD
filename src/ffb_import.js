@@ -599,17 +599,28 @@ async function readFFBContract(source,headers,worker,generation){
   });
   for(const kind of ["contract","declarer"]){
    const parse=kind==="contract"?C.parseContract:C.parseDeclarer;
-   const rect=regions[kind];
-   for(const variant of ["median","binary"]){
+   // A faint gray declarer is often recognized as a single word,
+   // unlike the bold contract line. PSM 8 helps on iPhone photos.
+   await worker.setParameters({
+    tessedit_pageseg_mode:kind==="declarer"?"8":"7"
+   });
+   const variants=kind==="declarer"
+    ?["median","tight","binary"]
+    :["median","binary"];
+   for(const variant of variants){
     ensureCurrent(generation);
-    const image=variant==="median"
-     ?cropPhotoDenoised(source,rect)
-     :cropCanvas(source,rect,true,"boosted");
+    const rect=variant==="tight"?regions.declarerTight:regions[kind];
+    const image=variant==="binary"
+     ?cropCanvas(source,rect,true,"boosted")
+     :cropPhotoDenoised(source,rect);
     const answer=await worker.recognize(image);
     ensureCurrent(generation);
-    if(Number(answer.data?.confidence)<18)continue;
     const value=parse(answer.data?.text);
-    if(value){
+    // Low confidence is normal for pale gray "par Ouest" (sometimes
+    // OCR confidence is 0 even when the word is visibly readable).
+    // Parsing still requires an unambiguous French direction.
+    if(value&&(kind==="declarer"||
+       Number(answer.data?.confidence)>=18)){
      if(kind==="contract")contract=value;
      else declarer=value;
      break;

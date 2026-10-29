@@ -31,13 +31,42 @@ function parseContract(raw){
  if(matches.length!==1)return null;
  return matches[0];
 }
+// Gray "par Ouest" often reads as "por Ouest", "par Oust" or
+// "porOuest" when photographed on an LCD. Match an unambiguous
+// direction after a plausible preposition, not arbitrary OCR words.
+function editDistanceAtMostOne(a,b){
+ if(Math.abs(a.length-b.length)>1)return false;
+ if(a===b)return true;
+ let i=0,j=0,errors=0;
+ while(i<a.length&&j<b.length){
+  if(a[i]===b[j]){i++;j++;continue;}
+  if(++errors>1)return false;
+  if(a.length>=b.length)i++;
+  if(b.length>=a.length)j++;
+ }
+ return errors+Math.max(a.length-i,b.length-j)<=1;
+}
 function parseDeclarer(raw){
- const text=clean(raw).replace(/\s+/g," ").trim();
- // Allow a missing "par" when the OCR crop contains just a single
- // direction. Never use score numbers or player names as directions.
- const match=text.match(/\bPAR\s*(NORD|OUEST|EST|SUD|NORTH|WEST|EAST|SOUTH)\b/)||
-  text.match(/^(NORD|OUEST|EST|SUD|NORTH|WEST|EAST|SOUTH)$/);
- return match?directions[match[1]]:null;
+ const text=clean(raw).replace(/0/g,"O").replace(/5/g,"S")
+  .replace(/1/g,"I").replace(/[^A-Z\s]/g," ")
+  .replace(/\s+/g," ").trim();
+ if(!text)return null;
+ const names=["NORD","OUEST","EST","SUD","NORTH","WEST","EAST","SOUTH"];
+ const exact=directions[text];
+ if(exact)return exact;
+ // The result might be surrounded by OCR speckles (bars, punctuation,
+ // etc.), but require an unambiguous 'par / por / per / pr' prefix.
+ const matches=[];
+ const prefix=/(?:^|\s)P(?:AR|OR|ER|R)\s*([A-Z]{3,7})(?=\s|$)/g;
+ let found;
+ while((found=prefix.exec(text))){
+  const token=found[1];
+  const candidates=names.filter(name=>editDistanceAtMostOne(token,name));
+  const resolved=new Set(candidates.map(name=>directions[name]));
+  if(resolved.size===1)matches.push([...resolved][0]);
+ }
+ const unique=new Set(matches);
+ return unique.size===1?[...unique][0]:null;
 }
 function locate(image,headers){
  const w=image?.width|0,h=image?.height|0;
@@ -59,9 +88,12 @@ function locate(image,headers){
  };
  // The two text baselines are below the W/E headers; separate them
  // from the lower percentage score. Calibrated on two real monitor photos.
- const contract=rect(.72,.67),declarer=rect(1.22,.43);
+ const contract=rect(.72,.67),declarer=rect(1.28,.43);
+ // Tighter secondary crop excludes parts of the contract/score above
+ // and below the faint declarer line on photographed monitors.
+ const declarerTight=rect(1.37,.33);
  if(contract.h<16||declarer.h<16||contract.w<35)return null;
- return {contract,declarer};
+ return {contract,declarer,declarerTight};
 }
 const api={parseContract,parseDeclarer,locate};
 root.BridgeFFBContract=api;

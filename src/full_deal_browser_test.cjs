@@ -603,13 +603,13 @@ test("V40: grayscale OCR fallback preserves faint monitor characters and blue ba
 });
 
 
-test("V45: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
+test("V46: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
  const fs=require("node:fs");
  const index=fs.readFileSync("docs/index.html","utf8");
  const importScript=fs.readFileSync("docs/ffb_import.js","utf8");
- assert.ok(index.includes("ffb_import.js?v=contract-v45"));
- assert.ok(index.includes("coach.js?v=mobile-v45"));
- assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V45'));
+ assert.ok(index.includes("ffb_import.js?v=declarer-v46"));
+ assert.ok(index.includes("coach.js?v=mobile-v46"));
+ assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V46'));
  assert.ok(importScript.includes("if(done%4===0)showProvisional"));
  assert.ok(importScript.includes("if(provisional.total>0)"));
 });
@@ -730,4 +730,12 @@ test("V45: FFB contract and declarer detected on photo preselect editable dropdo
   })));
   assert.equal(await page.locator("#bridge-contract-ocr-hint").isVisible(),false);
  }finally{await browser.close();}
+});
+
+test("V46: FFB contract OCR uses single-word mode and never filters faint declarer by confidence",()=>{
+ const fs=require("node:fs");
+ const s=fs.readFileSync("docs/ffb_import.js","utf8");
+ assert.ok(s.includes('tessedit_pageseg_mode:kind==="declarer"?"8":"7"'));
+ assert.ok(s.includes('?["median","tight","binary"]'));
+ assert.ok(s.includes('kind==="declarer"||'));
 });

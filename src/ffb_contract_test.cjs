@@ -8,6 +8,15 @@ test("V45: French FFB sans-atout contract and declarer",()=>{
  assert.equal(C.parseDeclarer("PAR NORD"),"north");
  assert.equal(C.parseDeclarer("par Est"),"east");
  assert.equal(C.parseDeclarer("par Sud"),"south");
+ assert.equal(C.parseDeclarer("por Ouest"),"west");
+ assert.equal(C.parseDeclarer("| por Ouest’) |"),"west");
+ assert.equal(C.parseDeclarer("porOuest"),"west");
+ assert.equal(C.parseDeclarer("par Quest"),"west");
+ assert.equal(C.parseDeclarer("par Ouert"),"west");
+ assert.equal(C.parseDeclarer("par Oust"),"west");
+ assert.equal(C.parseDeclarer("par 0uest"),"west");
+ assert.equal(C.parseDeclarer("per Est"),"east");
+ assert.equal(C.parseDeclarer("pr Nord"),"north");
 });
 test("V45: every denomination and contract level; French accents",()=>{
  for(const [value,level,strain] of [
@@ -22,7 +31,7 @@ test("V45: do not invent a contract from scores, overtricks, or uncertain OCR",(
   if(text==="4C")assert.equal(C.parseContract(text),null);
   else assert.equal(C.parseContract(text),null,text);
  }
- for(const text of ["par","par Marie José","93,13 %","par Oust","",null]){
+ for(const text of ["par","par Marie José","93,13 %","par Due","par Ets Ouest","",null]){
   assert.equal(C.parseDeclarer(text),null,String(text));
  }
 });
@@ -37,6 +46,9 @@ test("V45: OCR crops occupy the centre of a photographed FFB table",()=>{
  assert.ok(sample.contract.x>=540&&sample.contract.x<700,JSON.stringify(sample));
  assert.ok(sample.contract.y>=810&&sample.contract.y<845,JSON.stringify(sample));
  assert.ok(sample.declarer.y>sample.contract.y);
+ assert.ok(sample.declarerTight.y>sample.declarer.y);
+ assert.ok(sample.declarerTight.y+sample.declarerTight.h<
+  sample.declarer.y+sample.declarer.h);
  assert.ok(sample.declarer.y+sample.declarer.h<1110);
  assert.equal(C.locate({width:1536,height:2048},[
   {seat:"west",x:100,y:717,w:412,h:157}]),null);
