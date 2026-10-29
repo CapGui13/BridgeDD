@@ -273,6 +273,49 @@ function cropPhotoGrayscale(image,rect,trim=false){
  dest.drawImage(textRegion,pad,pad,textRegion.width*4,textRegion.height*4);
  return out;
 }
+/* Photographic rank-only reading, with no suit symbols or LCD moire. */
+function cropPhotoRankInk(image,rect){
+ if(rect.w<=0||rect.h<=0||!window.BridgePhotoRank)return null;
+ const raw=document.createElement("canvas");
+ raw.width=Math.max(1,Math.round(rect.w));
+ raw.height=Math.max(1,Math.round(rect.h));
+ const ctx=raw.getContext("2d",{willReadFrequently:true});
+ ctx.fillStyle="#fff";ctx.fillRect(0,0,raw.width,raw.height);
+ ctx.drawImage(image,rect.x,rect.y,rect.w,rect.h,0,0,raw.width,raw.height);
+ const prepared=window.BridgePhotoRank.isolate(
+  ctx.getImageData(0,0,raw.width,raw.height));
+ if(!prepared.boxes.length)return null;
+ const mask=prepared.mask,w=prepared.width,h=prepared.height;
+ const makeCanvas=box=>{
+  const left=Math.max(0,box.x-5),top=Math.max(0,box.y-5);
+  const right=Math.min(w,box.x+box.w+6),bottom=Math.min(h,box.y+box.h+6);
+  const width=right-left,height=bottom-top;
+  const tiny=document.createElement("canvas");
+  tiny.width=width;tiny.height=height;
+  const dest=tiny.getContext("2d");
+  const out=dest.createImageData(width,height);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+   const dark=mask[(y+top)*w+x+left],j=(y*width+x)*4;
+   out.data[j]=out.data[j+1]=out.data[j+2]=dark?0:255;
+   out.data[j+3]=255;
+  }
+  dest.putImageData(out,0,0);
+  const zoom=document.createElement("canvas"),pad=16;
+  zoom.width=width*4+pad*2;zoom.height=height*4+pad*2;
+  const z=zoom.getContext("2d");
+  z.fillStyle="#fff";z.fillRect(0,0,zoom.width,zoom.height);
+  z.imageSmoothingEnabled=false;
+  z.drawImage(tiny,pad,pad,width*4,height*4);
+  return zoom;
+ };
+ const boxes=prepared.boxes;
+ const left=Math.min(...boxes.map(c=>c.x)),top=Math.min(...boxes.map(c=>c.y));
+ const right=Math.max(...boxes.map(c=>c.x+c.w));
+ const bottom=Math.max(...boxes.map(c=>c.y+c.h));
+ return {canvas:makeCanvas({x:left,y:top,w:right-left,h:bottom-top}),
+  parts:boxes.map(makeCanvas)};
+}
+
 function cropCanvas(image,rect,photo=false,alternate=false) {
  if(!rect.w||!rect.h)throw new Error("Cadrage des cartes invalide.");
  // Pour une photo d'écran, binariser AVANT d'agrandir les pixels :
@@ -460,10 +503,32 @@ async function readFFB(source,headers,generation){
    }
   }
   if(isPhoto){
+   // Preserve the legacy Tesseract output and add a rank-only reading for
+   // every photo row, including apparently complete yet incorrectly read rows.
+   const glyphRows=new Map();
+   await worker.setParameters({tessedit_pageseg_mode:"8"});
+   for(const entry of candidateRows){
+    ensureCurrent(generation);
+    const rect=P.cropForRowRetry(entry.header,entry.row,
+     source.width,source.height,0);
+    const isolated=cropPhotoRankInk(source,rect);
+    if(!isolated)continue;
+    glyphRows.set(entry,isolated);
+    const answer=await worker.recognize(isolated.canvas);
+    ensureCurrent(generation);
+    const normalized=P.normalize(answer.data?.text,true);
+    if(!normalized.invalid&&normalized.value.length<=13&&
+       new Set(normalized.value).size===normalized.value.length&&
+       !entry.options.some(opt=>opt.value===normalized.value))
+     entry.options.push({value:normalized.value,
+      confidence:Number(answer.data?.confidence)||0});
+   }
+   await worker.setParameters({tessedit_pageseg_mode:"7"});
    const first=P.validate(newHands);
    const inferred=P.completeFourthHand(newHands);
    if((!first.complete&&!inferred.completed)||
-      candidateRows.some(r=>P.orderInfo(r.options[0].value).outOfOrder)){
+      candidateRows.some(r=>r.options.length>1||
+       P.orderInfo(r.options[0].value).outOfOrder)){
     // Une seconde passe ciblée est moins lente qu'une relecture de 16 lignes.
     // Inclure aussi les couleurs avec doublons, pas seulement les mains <13.
     const suspect=new Set();
@@ -600,6 +665,43 @@ async function readFFB(source,headers,generation){
          confidence:Number(answer.data?.confidence)||0});
       }
       if(currentPsm!=="7")await worker.setParameters({tessedit_pageseg_mode:"7"});
+      ensureCurrent(generation);
+      reconciled=window.BridgeOCRReconcile?.choose(candidateRows,P)||reconciled;
+     }
+     // A photograph may turn 9 into D (Queen). If its extra character
+     // causes conflicts with another seat, read each rank individually.
+     const problemSuits=new Set([
+      ...(reconciled?.validation?.missing||[]).map(x=>x[0]),
+      ...(reconciled?.validation?.duplicates||[]).map(x=>x[0]),
+      ...(reconciled?.orderWarnings||[]).map(x=>x.suit)
+     ]);
+     const divergent=candidateRows.filter(entry=>
+      problemSuits.has(entry.suit)&&
+      new Set(entry.options.map(opt=>opt.value)).size>1&&
+      glyphRows.get(entry)?.parts.length>0&&
+      glyphRows.get(entry).parts.length<=9);
+     if(divergent.length){
+      await worker.setParameters({tessedit_pageseg_mode:"8"});
+      for(const entry of divergent){
+       ensureCurrent(generation);
+       const parts=glyphRows.get(entry).parts;
+       let word="",confidence=0,valid=true;
+       for(const canvas of parts){
+        const answer=await worker.recognize(canvas);
+        ensureCurrent(generation);
+        const raw=String(answer.data?.text||"").trim().replace(/\s+/g,"");
+        if(!/^[ARDVJQKT0-9]$/.test(raw)){valid=false;break;}
+        word+=raw;confidence+=Number(answer.data?.confidence)||0;
+       }
+       if(!valid)continue;
+       const parsed=P.normalize(word,true);
+       if(!parsed.invalid&&parsed.value.length<=13&&
+          new Set(parsed.value).size===parsed.value.length&&
+          !entry.options.some(opt=>opt.value===parsed.value))
+        entry.options.push({value:parsed.value,
+         confidence:confidence/parts.length});
+      }
+      await worker.setParameters({tessedit_pageseg_mode:"7"});
       ensureCurrent(generation);
       reconciled=window.BridgeOCRReconcile?.choose(candidateRows,P)||reconciled;
      }
