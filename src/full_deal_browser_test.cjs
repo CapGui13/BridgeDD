@@ -2,6 +2,20 @@
    Teste le parcours contrat → 52 cartes → annuler → dernière carte. */
 const test=require("node:test"),assert=require("node:assert/strict");
 const {chromium}=require("playwright");
+// Chromium's COOP/COEP service worker can need one navigation to claim a
+// fresh isolated context. Retrying the page, not bypassing isolation,
+// avoids an intermittent CI-only timeout in the full DDS browser suite.
+async function waitIsolated(page,ready){
+ for(let attempt=0;attempt<3;attempt++){
+  try{
+   await page.waitForFunction(ready,null,{timeout:20000});
+   return;
+  }catch(err){
+   if(attempt===2)throw err;
+   await page.reload({waitUntil:"domcontentloaded",timeout:40000});
+  }
+ }
+}
 test("52 actual legal card plays, optimal moves, undo, end of deal",{
  timeout:360000
 },async()=>{
@@ -17,9 +31,9 @@ test("52 actual legal card plays, optimal moves, undo, end of deal",{
   await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
    waitUntil:"domcontentloaded",timeout:40000
   });
-  await page.waitForFunction(()=>window.crossOriginIsolated===true &&
+  await waitIsolated(page,()=>window.crossOriginIsolated===true &&
    window.BridgeFFB && typeof window.startPlay==="function" &&
-   !!document.getElementById("coach-start"),null,{timeout:45000});
+   !!document.getElementById("coach-start"));
   const setup=await page.evaluate(()=>{
    const {normalize,validate}=window.BridgeFFB;
    const deal=[
@@ -132,8 +146,8 @@ test("iPhone geometry, optional 52-card review, and playable suit picker",{
   await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
    waitUntil:"domcontentloaded",timeout:40000
   });
-  await page.waitForFunction(()=>window.crossOriginIsolated===true&&
-   !!window.BridgeFFBImport?.openReview&&typeof window.startPlay==="function",null,{timeout:45000});
+  await waitIsolated(page,()=>window.crossOriginIsolated===true&&
+   !!window.BridgeFFBImport?.openReview&&typeof window.startPlay==="function");
   await page.evaluate(()=>{
    const P=window.BridgeFFB;
    const deal=[
