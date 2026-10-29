@@ -871,13 +871,13 @@ async function handleFile(file) {
   // sans caractère inconnu) se charge sans confirmation supplémentaire.
   // Dans tous les autres cas, conserver l'écran de correction.
   importAutomatically=P.validate(hands).complete&&!reading.requiresReview;
-  if(reading.requiresReview){
-   setStatus(reading.reason||"Vérifie les cartes avant de charger la donne.");
-  }else if(!importAutomatically){
+  if(reading.requiresReview||!importAutomatically){
    const recognized=P.validate(hands).total;
    setStatus(recognized===0
-    ?"Les 4 joueurs ont été localisés, mais aucune carte n'a été lue (0/52). Envoie-moi cette indication pour diagnostiquer le moteur OCR."
-    :"Reconnaissance partielle : "+recognized+"/52 cartes lues. Corrige les cartes avant de charger la donne.");
+    ?"4 joueurs détectés, mais aucune carte lue (0/52) : échec du moteur OCR, et non des bandeaux FFB."
+    :(recognized<52
+      ?"Lecture photo partielle : "+recognized+"/52 cartes détectées. Vérifie et corrige les couleurs ci-dessous."
+      :(reading.reason||"Vérifie les cartes avant de charger la donne.")));
   }
  }catch(err){
   if(generation===recognitionGeneration)
