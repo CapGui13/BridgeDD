@@ -1,5 +1,14 @@
 /* Reconnaissance de captures FFB — écran de vérification tactile. */
-#ffb-select{background:#edf3ff!important;border-color:#b6c9e9!important;color:#23427c!important;font-weight:700!important}
+/* V38: two explicit import actions on the welcome screen. */
+#ffb-import-actions{display:inline-flex;align-items:stretch;gap:8px;vertical-align:middle;margin:4px 6px 4px 0}
+#ffb-import-actions button{
+ border:1px solid #aac0e6!important;border-radius:9px!important;
+ min-height:40px!important;padding:8px 12px!important;
+ font-size:14px!important;font-weight:750!important;line-height:1.3!important;
+ cursor:pointer;touch-action:manipulation;white-space:normal
+}
+#ffb-camera{background:#304a94!important;color:#fff!important;border-color:#27407c!important}
+#ffb-select{background:#edf3ff!important;color:#23427c!important}
 #ffb-dialog[hidden],#ffb-complete[hidden],#ffb-image-details[hidden]{display:none!important}
 #ffb-dialog{position:fixed;inset:0;z-index:9999;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .ffb-scrim{position:absolute;inset:0;background:rgba(15,28,52,.57)}
@@ -41,7 +50,11 @@
  .ffb-seat{padding:5px}
 }
 @media (max-width:650px){
- #ffb-select{min-height:29px!important;height:29px!important;margin:2px 1px!important;padding:3px 6px!important;font-size:11px!important;border-radius:7px!important}
+ #ffb-import-actions{display:flex;width:100%;max-width:480px;gap:8px;margin:10px 0 6px}
+ #ffb-import-actions button{
+  flex:1 1 0;min-width:0;min-height:44px!important;
+  padding:10px 6px!important;font-size:13px!important
+ }
 }
 
 /* Cartes manquantes d'une lecture OCR encore incomplète. */

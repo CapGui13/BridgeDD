@@ -495,3 +495,48 @@ test("V35: old and boosted photo thresholds must remain separate OCR alternative
     "Two photo threshold variants must not silently collapse to one");
  }finally{await browser.close();}
 });
+
+
+test("Accueil V38: camera and phototheque use independent image pickers",{
+ timeout:90000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:812},
+   serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForSelector("#ffb-import-actions", {timeout:45000});
+  const ui=await page.evaluate(()=>{
+   const camera=document.getElementById("ffb-camera-file");
+   const gallery=document.getElementById("ffb-file");
+   const cameraButton=document.getElementById("ffb-camera");
+   const galleryButton=document.getElementById("ffb-select");
+   const clicks=[];
+   // Intercept native file pickers without needing a physical iPhone.
+   camera.click=()=>clicks.push("camera");
+   gallery.click=()=>clicks.push("gallery");
+   cameraButton.click();galleryButton.click();
+   const bounds=[cameraButton,galleryButton].map(b=>b.getBoundingClientRect());
+   return {
+    camera:{type:camera.type,accept:camera.accept,capture:camera.capture},
+    gallery:{type:gallery.type,accept:gallery.accept,capture:gallery.getAttribute("capture")},
+    labels:[cameraButton.textContent,galleryButton.textContent],
+    clicks,
+    bounds:bounds.map(b=>({w:b.width,h:b.height}))
+   };
+  });
+  assert.equal(ui.camera.type,"file");
+  assert.equal(ui.gallery.type,"file");
+  assert.equal(ui.camera.accept,"image/*");
+  assert.equal(ui.gallery.accept,"image/*");
+  assert.equal(ui.camera.capture,"environment");
+  assert.equal(ui.gallery.capture,null);
+  assert.deepEqual(ui.clicks,["camera","gallery"]);
+  assert.match(ui.labels[0],/Prendre une photo/);
+  assert.match(ui.labels[1],/Photothèque/);
+  assert.ok(ui.bounds.every(x=>x.w>=120&&x.h>=44),JSON.stringify(ui.bounds));
+ }finally{await browser.close();}
+});

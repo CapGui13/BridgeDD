@@ -17,7 +17,9 @@ function setBusy(value){
  busy=value;
  // Ne pas bloquer le sélecteur de fichiers pendant une OCR longue.
  $("ffb-file").disabled=false;
+ $("ffb-camera-file").disabled=false;
  $("ffb-select").disabled=false;
+ $("ffb-camera").disabled=false;
  $("ffb-apply").disabled=value||!P.validate(hands).complete;
  $("ffb-choose-another").disabled=false;
  $("ffb-close").disabled=false;
@@ -31,6 +33,7 @@ function closeDialog(){
  cancelRecognition();
  $("ffb-dialog").hidden=true;
  $("ffb-file").value="";
+ $("ffb-camera-file").value="";
  if(reviewSnapshot){
   hands=reviewSnapshot;
   reviewSnapshot=null;
@@ -839,19 +842,38 @@ function applyDeal(){
   detail:{source:"ffb",inferred:lastInferred}
  }));
  $("ffb-file").value="";
+ $("ffb-camera-file").value="";
  const state=$("coach-verdict");
  if(state){state.className="coach-verdict good";state.textContent="Donne FFB importée : 52 cartes validées. Choisis un contrat puis joue !";}
  document.querySelector(".grid-outer")?.scrollIntoView({block:"nearest",behavior:"smooth"});
 }
 function init(){
- const input=document.createElement("input");
- input.type="file";input.accept="image/*";input.id="ffb-file";input.hidden=true;
- const button=document.createElement("button");
- button.type="button";button.id="ffb-select";button.textContent="📷 FFB";
- button.title="Importer une capture d'écran FFB";
- button.onclick=()=>{if(!busy){input.value="";input.click();}};
+ // Separate native pickers: iPhone camera (rear-facing when available)
+ // versus system photo chooser. Both feed the unchanged V37 OCR pipeline.
+ const galleryInput=document.createElement("input");
+ galleryInput.type="file";galleryInput.accept="image/*";
+ galleryInput.id="ffb-file";galleryInput.hidden=true;
+ const cameraInput=document.createElement("input");
+ cameraInput.type="file";cameraInput.accept="image/*";
+ cameraInput.capture="environment";
+ cameraInput.id="ffb-camera-file";cameraInput.hidden=true;
+ const actions=document.createElement("div");
+ actions.id="ffb-import-actions";
+ actions.setAttribute("role","group");
+ actions.setAttribute("aria-label","Importer une donne FFB");
+ const cameraButton=document.createElement("button");
+ cameraButton.type="button";cameraButton.id="ffb-camera";
+ cameraButton.textContent="📷 Prendre une photo";
+ cameraButton.title="Prendre une photo avec l'appareil photo";
+ cameraButton.onclick=()=>{cameraInput.value="";cameraInput.click();};
+ const galleryButton=document.createElement("button");
+ galleryButton.type="button";galleryButton.id="ffb-select";
+ galleryButton.textContent="🖼️ Photothèque";
+ galleryButton.title="Choisir une photo existante";
+ galleryButton.onclick=()=>{galleryInput.value="";galleryInput.click();};
+ actions.append(cameraButton,galleryButton,galleryInput,cameraInput);
  const after=$("sample-deals");
- if(after)after.after(button,input);else document.body.append(button,input);
+ if(after)after.after(actions);else document.body.append(actions);
  const modal=document.createElement("section");
  modal.id="ffb-dialog";modal.hidden=true;
  modal.innerHTML=`<div class="ffb-scrim"></div>
@@ -874,7 +896,8 @@ function init(){
  document.body.appendChild(modal);
  $("ffb-close").addEventListener("click",closeDialog);
  $("ffb-choose-another").addEventListener("click",chooseAnotherPhoto);
- input.addEventListener("change",()=>handleFile(input.files?.[0]));
+ galleryInput.addEventListener("change",()=>handleFile(galleryInput.files?.[0]));
+ cameraInput.addEventListener("change",()=>handleFile(cameraInput.files?.[0]));
  $("ffb-apply").addEventListener("click",applyDeal);
  repaintForm();
 }
