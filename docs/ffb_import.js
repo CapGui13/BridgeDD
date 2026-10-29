@@ -12,6 +12,7 @@ let hands=P.empty(), busy=false, imageUrl=null;
 let reviewSnapshot=null,lastInferred=null,recognitionGeneration=0;
 let orderWarnings=[],diagramMode=false,metadataSnapshot=null;
 let boardInfo={number:null,dealer:"",vulnerability:""};
+let recognizedContract=null;
 const $=id=>document.getElementById(id);
 function setStatus(message){$("ffb-status").textContent=message;}
 function setBusy(value){
@@ -583,6 +584,51 @@ async function readFFBBoardNumber(source,headers,worker,generation){
  }
 }
 
+// OCR the FFB contract ("2 SA +3") and declarer ("par Ouest")
+// independently. Missing/uncertain values are never guessed.
+async function readFFBContract(source,headers,worker,generation){
+ const C=window.BridgeFFBContract;
+ const regions=C?.locate(source,headers);
+ if(!regions)return null;
+ let contract=null,declarer=null;
+ try{
+  await worker.setParameters({
+   tessedit_char_whitelist:
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-♠♥♦♣ ",
+   tessedit_pageseg_mode:"7",preserve_interword_spaces:"1"
+  });
+  for(const kind of ["contract","declarer"]){
+   const parse=kind==="contract"?C.parseContract:C.parseDeclarer;
+   const rect=regions[kind];
+   for(const variant of ["median","binary"]){
+    ensureCurrent(generation);
+    const image=variant==="median"
+     ?cropPhotoDenoised(source,rect)
+     :cropCanvas(source,rect,true,"boosted");
+    const answer=await worker.recognize(image);
+    ensureCurrent(generation);
+    if(Number(answer.data?.confidence)<18)continue;
+    const value=parse(answer.data?.text);
+    if(value){
+     if(kind==="contract")contract=value;
+     else declarer=value;
+     break;
+    }
+   }
+  }
+ }catch(err){
+  ensureCurrent(generation);
+  // Preselection is optional; a failure must not block card recognition.
+ }finally{
+  await worker.setParameters({
+   tessedit_char_whitelist:"ARDVJQKT0123456789",
+   tessedit_pageseg_mode:"7",preserve_interword_spaces:"1"
+  });
+ }
+ if(!contract&&!declarer)return null;
+ return {...(contract||{}),...(declarer?{declarer}:{})};
+}
+
 async function readFFB(source,headers,generation){
  ensureCurrent(generation);
  // Show provisional ranks as soon as we have them, rather than leaving
@@ -651,6 +697,11 @@ async function readFFB(source,headers,generation){
   if(window.BridgeFFBBoard){
    const detected=await readFFBBoardNumber(source,headers,worker,generation);
    applyDetectedBoard(detected);
+  }
+  // Read optional contract preselection using the same OCR worker.
+  if(window.BridgeFFBContract){
+   setStatus("Lecture du contrat et du déclarant…");
+   recognizedContract=await readFFBContract(source,headers,worker,generation);
   }
   let done=0;
   for(const header of headers){
@@ -972,6 +1023,7 @@ async function handleFile(file) {
  lastInferred=null;
  reviewSnapshot=null;
  orderWarnings=[];
+ recognizedContract=null;
  boardInfo={number:null,dealer:"",vulnerability:""};
  setDiagramMode(false);
  syncBoardControls();
@@ -1063,7 +1115,8 @@ function applyDeal(){
  metadataSnapshot=null;
  closeDialog();
  window.dispatchEvent(new CustomEvent("bridge:deal-imported",{
-  detail:{source:"ffb",inferred:lastInferred,board:{...boardInfo}}
+  detail:{source:"ffb",inferred:lastInferred,board:{...boardInfo},
+    contract:recognizedContract?{...recognizedContract}:null}
  }));
  $("ffb-file").value="";
  $("ffb-camera-file").value="";
@@ -1134,7 +1187,7 @@ function init(){
  repaintForm();
  syncBoardControls();
 }
-window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V44"};
+window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V45"};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();
