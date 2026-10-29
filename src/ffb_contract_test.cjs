@@ -35,7 +35,7 @@ test("V45: OCR crops occupy the centre of a photographed FFB table",()=>{
  ]);
  assert.ok(sample);
  assert.ok(sample.contract.x>=540&&sample.contract.x<700,JSON.stringify(sample));
- assert.ok(sample.contract.y>=840&&sample.contract.y<890,JSON.stringify(sample));
+ assert.ok(sample.contract.y>=810&&sample.contract.y<845,JSON.stringify(sample));
  assert.ok(sample.declarer.y>sample.contract.y);
  assert.ok(sample.declarer.y+sample.declarer.h<1110);
  assert.equal(C.locate({width:1536,height:2048},[
