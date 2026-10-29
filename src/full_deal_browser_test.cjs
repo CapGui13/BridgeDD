@@ -603,13 +603,13 @@ test("V40: grayscale OCR fallback preserves faint monitor characters and blue ba
 });
 
 
-test("V47: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
+test("V48: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
  const fs=require("node:fs");
  const index=fs.readFileSync("docs/index.html","utf8");
  const importScript=fs.readFileSync("docs/ffb_import.js","utf8");
- assert.ok(index.includes("ffb_import.js?v=align-v47"));
- assert.ok(index.includes("coach.js?v=mobile-v47"));
- assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V47'));
+ assert.ok(index.includes("ffb_import.js?v=contract-v48"));
+ assert.ok(index.includes("coach.js?v=mobile-v48"));
+ assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V48'));
  assert.ok(importScript.includes("if(done%4===0)showProvisional"));
  assert.ok(importScript.includes("if(provisional.total>0)"));
 });
@@ -777,5 +777,39 @@ test("V47: align inferred south rows without moving detected green banners",{
   assert.ok(result.second.y<710&&result.second.y+result.second.h>724,JSON.stringify(result));
   assert.equal(result.westOriginal,true);
   assert.equal(result.eastOriginal,true);
+ }finally{await browser.close();}
+});
+
+test("V48: visually verified spade OCR from photograph-like canvas, not unknown suit guesses",{
+ timeout:90000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:812},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>!!window.BridgeFFBContract?.parseContractVisual,null,{timeout:45000});
+  const result=await page.evaluate(()=>{
+   const C=window.BridgeFFBContract,make=(suit)=>{
+    const canvas=document.createElement("canvas");
+    canvas.width=610;canvas.height=220;
+    const ctx=canvas.getContext("2d");
+    ctx.fillStyle="#fff";ctx.fillRect(0,0,610,220);
+    ctx.fillStyle="#111";
+    ctx.font="bold 92px Arial, sans-serif";
+    ctx.fillText("1"+suit+" X-1",35,137);
+    return canvas;
+   };
+   return {spades:C.parseContractVisual("1@ X-1",make("♠")),
+    clubs:C.parseContractVisual("1@ X-1",make("♣")),
+    hearts:C.parseContractVisual("1@ X-1",make("♥")),
+    spadesNumerical:C.parseContractVisual("1@ X-1",make("5"))};
+  });
+  assert.deepEqual(result.spades,{level:1,strain:"S"},JSON.stringify(result));
+  assert.equal(result.clubs,null,JSON.stringify(result));
+  assert.equal(result.hearts,null,JSON.stringify(result));
+  assert.equal(result.spadesNumerical,null,JSON.stringify(result));
  }finally{await browser.close();}
 });

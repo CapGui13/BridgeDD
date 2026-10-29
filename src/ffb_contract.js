@@ -68,6 +68,88 @@ function parseDeclarer(raw){
  const resolved=new Set(candidates.map(name=>directions[name]));
  return resolved.size===1?[...resolved][0]:null;
 }
+
+/* V48: Tesseract's English model often reads the FFB spade glyph as
+   '@' on a photographed LCD: '1♠ X -1' -> '1@ X-1'.
+   Accept that alias ONLY if the photographed glyph's actual silhouette
+   has the pointed, outward-growing crown and a narrow bottom stem.
+   The shape is checked from the crop itself; never reinterpret a plain
+   number, score, or an unverified '@' as a suit. */
+function looksLikeSpade(canvas){
+ if(!canvas?.getContext)return false;
+ const w=canvas.width|0,h=canvas.height|0;
+ if(w<70||h<35||w*h>1250000)return false;
+ let source;
+ try{source=canvas.getContext("2d",{willReadFrequently:true})
+  .getImageData(0,0,w,h).data;}catch(_){return false;}
+ const mask=new Uint8Array(w*h),queue=new Int32Array(w*h);
+ for(let i=0;i<w*h;i++){
+  const j=i*4;
+  const gray=.299*source[j]+.587*source[j+1]+.114*source[j+2];
+  if(gray<105)mask[i]=1;
+ }
+ const pieces=[];
+ for(let start=0;start<mask.length;start++){
+  if(!mask[start])continue;
+  let head=0,tail=1,minX=w,minY=h,maxX=-1,maxY=-1;
+  queue[0]=start;mask[start]=0;
+  while(head<tail){
+   const i=queue[head++],y=Math.floor(i/w),x=i-y*w;
+   if(x<minX)minX=x;if(x>maxX)maxX=x;
+   if(y<minY)minY=y;if(y>maxY)maxY=y;
+   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+    if(!dx&&!dy)continue;
+    const yy=y+dy,xx=x+dx;
+    if(xx>=0&&xx<w&&yy>=0&&yy<h){
+     const k=yy*w+xx;
+     if(mask[k]){mask[k]=0;queue[tail++]=k;}
+    }
+   }
+  }
+  const pw=maxX-minX+1,ph=maxY-minY+1;
+  if(tail>=35&&ph>=Math.max(12,h*.19)&&pw>=5)
+   pieces.push({x:minX,y:minY,w:pw,h:ph,area:tail});
+ }
+ pieces.sort((a,b)=>a.x-b.x);
+ // Only inspect the symbol immediately following a single level digit.
+ if(pieces.length<2)return false;
+ const digit=pieces[0],icon=pieces[1];
+ if(digit.w>digit.h*.66||
+    icon.x-digit.x-digit.w>digit.h*.52||
+    icon.w<icon.h*.7||icon.w>icon.h*1.25||
+    icon.h/digit.h<.80||icon.h/digit.h>1.55)return false;
+ const widths=new Uint16Array(icon.h);
+ const startX=Math.max(0,icon.x),endX=Math.min(w,icon.x+icon.w);
+ for(let y=0;y<icon.h;y++){
+  const yy=icon.y+y;
+  for(let x=startX;x<endX;x++){
+   const j=(yy*w+x)*4;
+   if(.299*source[j]+.587*source[j+1]+.114*source[j+2]<105)widths[y]++;
+  }
+ }
+ const avg=(lo,hi)=>{
+  const begin=Math.floor(icon.h*lo),end=Math.max(begin+1,Math.floor(icon.h*hi));
+  let n=0;for(let i=begin;i<Math.min(icon.h,end);i++)n+=widths[i];
+  return n/(Math.min(icon.h,end)-begin);
+ };
+ const top=avg(0,.12),middle=avg(.41,.63),stem=avg(.83,.96);
+ if(middle<icon.w*.64||top>=middle*.42||
+    stem<=middle*.14||stem>=middle*.48)return false;
+ let downward=0;
+ for(let y=2;y<Math.floor(icon.h*.50);y++){
+  if(widths[y+1]<widths[y]-Math.max(2,icon.w*.03))downward++;
+ }
+ return downward<=Math.max(2,Math.ceil(icon.h*.06));
+}
+function parseContractVisual(raw,canvas){
+ const recognized=parseContract(raw);
+ if(recognized)return recognized;
+ const text=clean(raw).replace(/\s+/g," ");
+ const tokens=[...text.matchAll(/(?:^|[^A-Z0-9])([1-7])\s*@(?=$|[^A-Z0-9@])/g)];
+ if(tokens.length!==1||!looksLikeSpade(canvas))return null;
+ return {level:Number(tokens[0][1]),strain:"S"};
+}
+
 function locate(image,headers){
  const w=image?.width|0,h=image?.height|0;
  const west=headers?.find(x=>x.seat==="west");
@@ -89,13 +171,23 @@ function locate(image,headers){
  // The two text baselines are below the W/E headers; separate them
  // from the lower percentage score. Calibrated on two real monitor photos.
  const contract=rect(.72,.67),declarer=rect(1.28,.43);
+ // Narrow crop for difficult symbol contracts (e.g. '1♠ X -1').
+ // A huge blank centre makes single-line Tesseract return no text.
+ const contractTight={
+  x:Math.max(0,Math.round(middle-typical*.55)),
+  y:Math.max(0,Math.round(top+typical*.85)),
+  w:Math.round(typical*1.3),
+  h:Math.round(typical*.45)
+ };
+ contractTight.w=Math.min(w-contractTight.x,contractTight.w);
+ contractTight.h=Math.min(h-contractTight.y,contractTight.h);
  // Tighter secondary crop excludes parts of the contract/score above
  // and below the faint declarer line on photographed monitors.
  const declarerTight=rect(1.37,.33);
  if(contract.h<16||declarer.h<16||contract.w<35)return null;
- return {contract,declarer,declarerTight};
+ return {contract,contractTight,declarer,declarerTight};
 }
-const api={parseContract,parseDeclarer,locate};
+const api={parseContract,parseContractVisual,looksLikeSpade,parseDeclarer,locate};
 root.BridgeFFBContract=api;
 if(typeof module==="object"&&module.exports)module.exports=api;
 })(typeof globalThis!=="undefined"?globalThis:this);

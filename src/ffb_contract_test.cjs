@@ -53,3 +53,20 @@ test("V45: OCR crops occupy the centre of a photographed FFB table",()=>{
  assert.equal(C.locate({width:1536,height:2048},[
   {seat:"west",x:100,y:717,w:412,h:157}]),null);
 });
+
+test("V48: symbol OCR alias needs visual spade evidence",()=>{
+ assert.equal(C.parseContract("1@ X-1"),null);
+ assert.equal(C.parseContractVisual("1@ X-1",null),null);
+ assert.equal(C.parseContractVisual("93,13%",null),null);
+ assert.deepEqual(C.parseContractVisual("2 SA +3",null),{level:2,strain:"N"});
+});
+test("V48: tighter crop of central contract avoids empty side margins",()=>{
+ const headers=[
+  {seat:"west",x:87,y:768,w:389,h:138},
+  {seat:"east",x:1007,y:771,w:404,h:136}
+ ];
+ const crop=C.locate({width:1536,height:2048},headers).contractTight;
+ assert.ok(crop.x<683&&crop.x>640,JSON.stringify(crop));
+ assert.ok(crop.y>872&&crop.y<899,JSON.stringify(crop));
+ assert.ok(crop.w<220&&crop.h<70,JSON.stringify(crop));
+});
