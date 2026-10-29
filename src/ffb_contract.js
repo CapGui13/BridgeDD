@@ -61,6 +61,9 @@ function parseDeclarer(raw){
  const stripped=text.replace(/^(?:[IL] )+/,"").replace(/(?: [IL])+$/,"");
  const match=stripped.match(/^P(?:AR|OR|ER|R)\s*([A-Z]{3,7})$/);
  if(!match)return null;
+ // Exact recognized direction always wins. EST and WEST are only
+ // one edit apart, so fuzzy matching alone would make "Est" ambiguous.
+ if(directions[match[1]])return directions[match[1]];
  const candidates=names.filter(name=>editDistanceAtMostOne(match[1],name));
  const resolved=new Set(candidates.map(name=>directions[name]));
  return resolved.size===1?[...resolved][0]:null;
