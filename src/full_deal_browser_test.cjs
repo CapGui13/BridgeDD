@@ -583,13 +583,13 @@ test("V40: grayscale OCR fallback preserves faint monitor characters and blue ba
 });
 
 
-test("V41: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
+test("V42: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
  const fs=require("node:fs");
  const index=fs.readFileSync("docs/index.html","utf8");
  const importScript=fs.readFileSync("docs/ffb_import.js","utf8");
- assert.ok(index.includes("ffb_import.js?v=photo-v41"));
- assert.ok(index.includes("coach.js?v=mobile-v41"));
- assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V41'));
+ assert.ok(index.includes("ffb_import.js?v=photo-v42"));
+ assert.ok(index.includes("coach.js?v=mobile-v42"));
+ assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V42'));
  assert.ok(importScript.includes("if(done%4===0)showProvisional"));
  assert.ok(importScript.includes("if(provisional.total>0)"));
 });
