@@ -1,5 +1,4 @@
 /* Reconnaissance de captures FFB — écran de vérification tactile. */
-#ffb-select{background:#edf3ff!important;border-color:#b6c9e9!important;color:#23427c!important;font-weight:700!important}
 #ffb-dialog[hidden],#ffb-complete[hidden],#ffb-image-details[hidden]{display:none!important}
 #ffb-dialog{position:fixed;inset:0;z-index:9999;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .ffb-scrim{position:absolute;inset:0;background:rgba(15,28,52,.57)}
@@ -39,9 +38,6 @@
  .ffb-sheet{inset:3% 2% 2%;padding:10px}
  .ffb-suit-row input{font-size:13px}
  .ffb-seat{padding:5px}
-}
-@media (max-width:650px){
- #ffb-select{min-height:29px!important;height:29px!important;margin:2px 1px!important;padding:3px 6px!important;font-size:11px!important;border-radius:7px!important}
 }
 
 /* Cartes manquantes d'une lecture OCR encore incomplète. */

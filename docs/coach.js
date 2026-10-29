@@ -188,8 +188,11 @@
     div.innerHTML=`<div class="coach-title"><strong>♠ <span>Bridge DD</span> ♥</strong><small>Analyse double dummy</small></div>
     <section id="bridge-step-photo" class="bridge-wizard-step">
       <h2>Importer une donne</h2>
-      <p>Choisis une capture du diagramme FFB depuis ton téléphone ou ton ordinateur.</p>
-      <button id="bridge-upload" type="button" class="coach-primary">📷 Choisir une image</button>
+      <p>Prends une photo du diagramme FFB ou sélectionne une image déjà enregistrée.</p>
+      <div class="bridge-import-options" role="group" aria-label="Importer une donne FFB">
+        <button id="bridge-upload-camera" type="button" class="coach-primary">📷 Prendre une photo</button>
+        <button id="bridge-upload-gallery" type="button" class="coach-primary">🖼️ Photothèque</button>
+      </div>
       <p id="bridge-photo-error" class="bridge-error" hidden role="alert"></p>
       <p class="bridge-wizard-note">Les 52 cartes sont reconnues automatiquement. Tu pourras corriger une erreur si nécessaire.</p>
     </section>
@@ -235,10 +238,10 @@
       setStage("photo");
       update();
     };
-    $("bridge-upload").addEventListener("click",()=>{
-      // Un seul clic programmatique sur l'input, pendant le geste utilisateur :
-      // compatible avec les restrictions de Safari iPhone pour Photos.
-      const input=$("ffb-file");
+    // Safari iPhone requires the native picker to open synchronously
+    // inside the button's user gesture. Do not await here.
+    const chooseImage=inputId=>{
+      const input=$(inputId);
       if(input&&!input.disabled){
         input.value="";
         input.click();
@@ -247,7 +250,9 @@
         error.textContent="L'import d'image n'est pas encore disponible. Recharge la page.";
         error.hidden=false;
       }
-    });
+    };
+    $("bridge-upload-camera").addEventListener("click",()=>chooseImage("ffb-camera-file"));
+    $("bridge-upload-gallery").addEventListener("click",()=>chooseImage("ffb-file"));
     $("bridge-contract-newphoto").addEventListener("click",newPhoto);
     $("bridge-verify-deal").addEventListener("click",()=>{
       if(!window.BridgeFFBImport?.openReview?.()){
