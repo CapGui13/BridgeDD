@@ -486,7 +486,7 @@ async function readFFB(source,headers,generation){
   hands=P.orderedHands(pending);
   repaintForm();
   const verdict=P.validate(hands);
-  setStatus("V41 · "+progress+" · "+verdict.total+
+  setStatus("V42 · "+progress+" · "+verdict.total+
    "/52 cartes provisoires. Lecture en cours…");
  };
  // Priorité au lecteur de glyphes FFB : plus rapide et testé sur les
@@ -809,7 +809,7 @@ async function readFFB(source,headers,generation){
    const recovered=draft?.hands||newHands;
    showProvisional(recovered,"OCR interrompu");
    return {hands:recovered,requiresReview:true,reason:
-    "V41 : OCR interrompu ("+(err?.message||"erreur")+
+    "V42 : OCR interrompu ("+(err?.message||"erreur")+
     "). "+P.validate(recovered).total+
     "/52 cartes récupérées. Vérifie et complète la donne."};
   }
@@ -868,7 +868,7 @@ async function handleFile(file) {
  let importAutomatically=false;
  setBusy(true);showDialog();
  repaintForm();
- setStatus("V41 · Ouverture de l'image et détection des quatre joueurs…");
+ setStatus("V42 · Ouverture de l'image et détection des quatre joueurs…");
  try {
   if(!file.type.startsWith("image/")&&
      !/\.(heic|heif|jpg|jpeg|png|webp)$/i.test(file.name||""))
@@ -878,9 +878,16 @@ async function handleFile(file) {
   const canvas=baseCanvas(image),ctx=canvas.getContext("2d",{willReadFrequently:true});
   const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
   const headers=P.detectFFBHeaders(pixels);
-  if(headers.length===4)setStatus("V41 · 4 joueurs détectés. Initialisation du moteur OCR…");
+  if(headers.length===4){
+   const fallback=headers.some(header=>header.recoveredFromGreen);
+   setStatus(fallback
+    ?"V42 · Deux bandeaux verts détectés : position d'Est et d'Ouest reconstruite. Démarrage OCR…"
+    :"V42 · Quatre bandeaux détectés. Démarrage OCR…");
+  }
   if(headers.length!==4){
-   throw new Error("Les quatre bandeaux de joueurs FFB (verts ou roses) n'ont pas été trouvés. Essaie une capture complète de la donne, comme ton exemple.");
+   throw new Error("V42 : repères FFB introuvables sur image "+
+    canvas.width+" × "+canvas.height+
+    ". Aucun calcul OCR n'a été lancé. Il faut au moins deux bandeaux de joueurs identifiables.");
   }
   if(imageUrl)URL.revokeObjectURL(imageUrl);
   imageUrl=URL.createObjectURL(file);
@@ -988,7 +995,7 @@ function init(){
  $("ffb-apply").addEventListener("click",applyDeal);
  repaintForm();
 }
-window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V41"};
+window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V42"};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();

@@ -140,7 +140,7 @@ function detectFFBHeaders(image){
   const bw=maxX-minX+1,bh=maxY-minY+1;
   if(bw>=w*.17&&bh>=Math.max(12,h*.008)&&bw/bh>1.6&&bw/bh<12&&
      tail>=bw*bh*.21)
-   components.push({x:minX,y:minY,w:bw,h:bh,area:tail});
+   components.push({x:minX,y:minY,w:bw,h:bh,area:tail,colour});
  }
  let best=null,bestScore=-Infinity;
  for(const left of components)for(const right of components){
@@ -153,6 +153,51 @@ function detectFFBHeaders(image){
   if(Math.min(left.h,right.h)<w*.055)continue;
   const score=left.area+right.area-Math.abs(left.y-right.y)*100;
   if(score>bestScore){best=[left,right];bestScore=score;}
+ }
+ // V42: A photographed screen can wash salmon-pink O/E banners almost
+ // completely into the background. The two distinct central green N/S
+ // player banners still locate the entire table. Infer the *geometry*
+ // of the lateral headers from those green anchors when the usual O/E
+ // pair is absent. The cards themselves must still be read by OCR.
+ let recoveredFromGreen=false;
+ if(!best){
+  const centralGreens=components.filter(c=>c.colour===1&&
+   c.x+c.w/2>w*.3&&c.x+c.w/2<w*.7&&
+   c.w>=w*.17&&c.h>=h*.035);
+  let anchors=null,score=-Infinity;
+  for(const top of centralGreens)for(const bottom of centralGreens){
+   if(bottom.y<=top.y)continue;
+   const separation=bottom.y-top.y;
+   const size=(top.h+bottom.h)/2;
+   if(separation<size*3||separation>size*8.8)continue;
+   const cxTop=top.x+top.w/2,cxBottom=bottom.x+bottom.w/2;
+   if(Math.abs(cxTop-cxBottom)>Math.max(top.w,bottom.w)*.52)continue;
+   if(Math.abs(top.w-bottom.w)>Math.max(top.w,bottom.w)*.36)continue;
+   const pairScore=top.area+bottom.area-Math.abs(cxTop-cxBottom)*40;
+   if(pairScore>score){anchors=[top,bottom];score=pairScore;}
+  }
+  if(anchors){
+   const [top,bottom]=anchors;
+   const centerX=(top.x+top.w/2+bottom.x+bottom.w/2)/2;
+   const targetWidth=Math.round((top.w+bottom.w)*.54);
+   const targetHeight=Math.round((top.h+bottom.h)*.50);
+   const yCenter=(top.y+bottom.y)/2;
+   // Positions are expressed relative to actual detected green banners,
+   // rather than absolute screen pixels or any known specific deal.
+   const wx=Math.max(0,Math.round(centerX-targetWidth*1.7));
+   const ex=Math.min(w-targetWidth,
+    Math.round(centerX+targetWidth*.65));
+   const y=Math.max(0,Math.round(yCenter));
+   const candidateWest={x:wx,y,w:targetWidth,h:targetHeight,
+    area:0,inferred:true};
+   const candidateEast={x:ex,y,w:targetWidth,h:targetHeight,
+    area:0,inferred:true};
+   if(candidateWest.x+candidateWest.w<w*.50&&
+      candidateEast.x>w*.51&&targetHeight>0){
+    best=[candidateWest,candidateEast];
+    recoveredFromGreen=true;
+   }
+  }
  }
  if(!best)return [];
  const [west,east]=best;
@@ -213,8 +258,8 @@ function detectFFBHeaders(image){
  };
  return [
   {seat:"north",...(restoreBannerWidth(north)||{x:xMiddle,y:yMiddle-offset,w:width,h:height,inferred:true}),photo},
-  {seat:"west",...correctedWest,photo},
-  {seat:"east",...correctedEast,photo},
+  {seat:"west",...correctedWest,photo,recoveredFromGreen},
+  {seat:"east",...correctedEast,photo,recoveredFromGreen},
   {seat:"south",...(restoreBannerWidth(south)||{x:xMiddle,y:yMiddle+offset,w:width,h:height,inferred:true}),photo}
  ];
 }
