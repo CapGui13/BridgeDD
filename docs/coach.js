@@ -187,7 +187,7 @@
     div.id="coach-toolbar";
     div.innerHTML=`<div class="coach-title"><strong>♠ <span>Bridge DD</span> ♥</strong><small>Analyse double dummy</small></div>
     <section id="bridge-step-photo" class="bridge-wizard-step">
-      <h2>Importer une donne <small id="bridge-app-version">V49</small></h2>
+      <h2>Importer une donne <small id="bridge-app-version">V50</small></h2>
       <p>Prends une photo du diagramme FFB ou sélectionne une image déjà enregistrée.</p>
       <div class="bridge-import-options" role="group" aria-label="Importer une donne FFB">
         <button id="bridge-upload-camera" type="button" class="coach-primary">📷 Prendre une photo</button>
@@ -200,9 +200,9 @@
       <h2>Quel contrat a été joué ?</h2>
       <p id="bridge-import-summary" class="bridge-confirmed">✓ Donne reconnue : 52 cartes.</p>
       <div class="coach-fields" id="bridge-contract-fields">
-        <label>Niveau<select id="coach-level"><option value="" disabled>Choisir…</option><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option></select></label>
-        <label>Couleur<select id="coach-strain"><option value="" disabled>Choisir…</option><option value="S">♠</option><option value="H">♥</option><option value="D">♦</option><option value="C">♣</option><option value="N">SA</option></select></label>
-        <label>Déclarant<select id="coach-seat"><option value="" disabled>Choisir…</option><option value="north">Nord</option><option value="east">Est</option><option value="south" selected>Sud</option><option value="west">Ouest</option></select></label>
+        <label>Niveau<select id="coach-level"><option value="" disabled selected>Choisir…</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></label>
+        <label>Couleur<select id="coach-strain"><option value="" disabled selected>Choisir…</option><option value="S">♠</option><option value="H">♥</option><option value="D">♦</option><option value="C">♣</option><option value="N">SA</option></select></label>
+        <label>Déclarant<select id="coach-seat"><option value="" disabled selected>Choisir…</option><option value="north">Nord</option><option value="east">Est</option><option value="south">Sud</option><option value="west">Ouest</option></select></label>
       </div>
       <p id="bridge-contract-ocr-hint" class="bridge-ocr-hint" hidden></p>
       <button id="coach-start" type="button" class="coach-primary">▶ Jouer et analyser</button>
