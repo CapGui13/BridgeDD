@@ -479,6 +479,16 @@ function workerPath(part){
 }
 async function readFFB(source,headers,generation){
  ensureCurrent(generation);
+ // Show provisional ranks as soon as we have them, rather than leaving
+ // all fields blank until the end of several slow iPhone OCR passes.
+ const showProvisional=(pending,progress)=>{
+  ensureCurrent(generation);
+  hands=P.orderedHands(pending);
+  repaintForm();
+  const verdict=P.validate(hands);
+  setStatus("V41 · "+progress+" · "+verdict.total+
+   "/52 cartes provisoires. Lecture en cours…");
+ };
  // Priorité au lecteur de glyphes FFB : plus rapide et testé sur les
  // 8 captures reçues. On garde l'OCR généraliste comme repli.
  let specialized=null;
@@ -547,6 +557,7 @@ async function readFFB(source,headers,generation){
     newHands[header.seat][suitOrder[row]]=parsed.value;
     candidateRows.push({seat:header.seat,suit:suitOrder[row],
       header,row,options:[{value:parsed.value,confidence:Number(result.data?.confidence)||0}]});
+    if(done%4===0)showProvisional(newHands,"Première lecture "+done+"/16");
    }
   }
   if(isPhoto){
@@ -593,6 +604,11 @@ async function readFFB(source,headers,generation){
         !entry.options.some(opt=>opt.value===parsed.value))
       entry.options.push({value:parsed.value,
        confidence:Number(answer.data?.confidence)||0});
+     if(count%4===0){
+      const partial=window.BridgeOCRReconcile?.choose(candidateRows,P);
+      if(partial?.hands)showProvisional(partial.hands,
+       "Relecture en gris "+count+"/16");
+     }
     }
    }
    const inferred=P.completeFourthHand(newHands);
@@ -785,6 +801,18 @@ async function readFFB(source,headers,generation){
   }
  } catch(err){
   ensureCurrent(generation);
+  // A failed worker or network resource must not erase already recovered
+  // ranks: leave the correction form populated.
+  const provisional=P.validate(newHands);
+  if(provisional.total>0){
+   const draft=window.BridgeOCRReconcile?.choose(candidateRows,P);
+   const recovered=draft?.hands||newHands;
+   showProvisional(recovered,"OCR interrompu");
+   return {hands:recovered,requiresReview:true,reason:
+    "V41 : OCR interrompu ("+(err?.message||"erreur")+
+    "). "+P.validate(recovered).total+
+    "/52 cartes récupérées. Vérifie et complète la donne."};
+  }
   if(specialized?.readCount===16){
    setStatus("Reconnaissance partielle : corrige les cartes non reconnues.");
    return {hands:specialized.hands,requiresReview:true,reason:
@@ -840,7 +868,7 @@ async function handleFile(file) {
  let importAutomatically=false;
  setBusy(true);showDialog();
  repaintForm();
- setStatus("Analyse du screenshot FFB…");
+ setStatus("V41 · Ouverture de l'image et détection des quatre joueurs…");
  try {
   if(!file.type.startsWith("image/")&&
      !/\.(heic|heif|jpg|jpeg|png|webp)$/i.test(file.name||""))
@@ -850,6 +878,7 @@ async function handleFile(file) {
   const canvas=baseCanvas(image),ctx=canvas.getContext("2d",{willReadFrequently:true});
   const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
   const headers=P.detectFFBHeaders(pixels);
+  if(headers.length===4)setStatus("V41 · 4 joueurs détectés. Initialisation du moteur OCR…");
   if(headers.length!==4){
    throw new Error("Les quatre bandeaux de joueurs FFB (verts ou roses) n'ont pas été trouvés. Essaie une capture complète de la donne, comme ton exemple.");
   }
@@ -959,7 +988,7 @@ function init(){
  $("ffb-apply").addEventListener("click",applyDeal);
  repaintForm();
 }
-window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised};
+window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V41"};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();
