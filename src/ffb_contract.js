@@ -56,17 +56,14 @@ function parseDeclarer(raw){
  if(exact)return exact;
  // The result might be surrounded by OCR speckles (bars, punctuation,
  // etc.), but require an unambiguous 'par / por / per / pr' prefix.
- const matches=[];
- const prefix=/(?:^|\s)P(?:AR|OR|ER|R)\s*([A-Z]{3,7})(?=\s|$)/g;
- let found;
- while((found=prefix.exec(text))){
-  const token=found[1];
-  const candidates=names.filter(name=>editDistanceAtMostOne(token,name));
-  const resolved=new Set(candidates.map(name=>directions[name]));
-  if(resolved.size===1)matches.push([...resolved][0]);
- }
- const unique=new Set(matches);
- return unique.size===1?[...unique][0]:null;
+ // Reject crops with multiple words/directions: these can contain
+ // part of another label (or a player name) and must not be guessed.
+ const stripped=text.replace(/^(?:[IL] )+/,"").replace(/(?: [IL])+$/,"");
+ const match=stripped.match(/^P(?:AR|OR|ER|R)\s*([A-Z]{3,7})$/);
+ if(!match)return null;
+ const candidates=names.filter(name=>editDistanceAtMostOne(match[1],name));
+ const resolved=new Set(candidates.map(name=>directions[name]));
+ return resolved.size===1?[...resolved][0]:null;
 }
 function locate(image,headers){
  const w=image?.width|0,h=image?.height|0;
