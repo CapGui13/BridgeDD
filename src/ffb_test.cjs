@@ -364,3 +364,30 @@ test("V39: this photographed FFB example forms a full 52-card deal",()=>{
  assert.equal(verdict.complete,true,JSON.stringify(verdict));
  assert.deepEqual(verdict.counts,{north:13,east:13,south:13,west:13});
 });
+
+
+test("V39: overextended red monitor banner does not shift West clubs below crop",()=>{
+ const w=1000,h=1333,data=new Uint8ClampedArray(w*h*4);
+ for(let i=0;i<data.length;i+=4){
+  data[i]=191;data[i+1]=189;data[i+2]=188;data[i+3]=255;
+ }
+ function fill(x,y,bw,bh,r,g,b){
+  for(let py=y;py<y+bh;py++)for(let px=x;px<x+bw;px++){
+   const i=(py*w+px)*4;
+   data[i]=r;data[i+1]=g;data[i+2]=b;
+  }
+ }
+ fill(371,123,273,108,20,112,39);
+ fill(385,759,253,95,30,109,43);
+ // The west pink component extends 16 pixels above its true banner,
+ // while East's remains correctly positioned; both are the same table row.
+ fill(69,439,262,124,167,147,133);
+ fill(690,455,268,106,181,161,146);
+ const found=p.detectFFBHeaders({width:w,height:h,data});
+ assert.equal(found.length,4,JSON.stringify(found));
+ assert.ok(Math.abs(found[1].y-455)<7,JSON.stringify(found[1]));
+ assert.ok(Math.abs(found[2].y-455)<7,JSON.stringify(found[2]));
+ assert.ok(Math.abs(found[1].h-102)<7,JSON.stringify(found[1]));
+ const club=p.cropForRow(found[1],3,w,h);
+ assert.ok(club.h>0&&club.y<1200,JSON.stringify(club));
+});
