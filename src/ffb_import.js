@@ -594,7 +594,10 @@ async function readFFBContract(source,headers,worker,generation){
  try{
   await worker.setParameters({
    tessedit_char_whitelist:
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-♠♥♦♣ ",
+    // Tesseract's English model often transcribes ♠ as '@'.
+    // It must be in the whitelist so parseContractVisual can validate
+    // the real spade silhouette instead of losing the suit entirely.
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-@♠♥♦♣ ",
    tessedit_pageseg_mode:"7",preserve_interword_spaces:"1"
   });
   for(const kind of ["contract","declarer"]){
@@ -1206,7 +1209,7 @@ function init(){
  repaintForm();
  syncBoardControls();
 }
-window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V48"};
+window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V49"};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();

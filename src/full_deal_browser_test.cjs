@@ -603,13 +603,13 @@ test("V40: grayscale OCR fallback preserves faint monitor characters and blue ba
 });
 
 
-test("V48: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
+test("V49: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
  const fs=require("node:fs");
  const index=fs.readFileSync("docs/index.html","utf8");
  const importScript=fs.readFileSync("docs/ffb_import.js","utf8");
- assert.ok(index.includes("ffb_import.js?v=contract-v48"));
- assert.ok(index.includes("coach.js?v=mobile-v48"));
- assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V48'));
+ assert.ok(index.includes("ffb_import.js?v=contract-v49"));
+ assert.ok(index.includes("coach.js?v=mobile-v49"));
+ assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V49'));
  assert.ok(importScript.includes("if(done%4===0)showProvisional"));
  assert.ok(importScript.includes("if(provisional.total>0)"));
 });
@@ -860,4 +860,49 @@ test("V48: visually verified spade OCR from photograph-like canvas, not unknown 
   assert.equal(result.hearts,null,JSON.stringify(result));
   assert.equal(result.spadesNumerical,null,JSON.stringify(result));
  }finally{await browser.close();}
+});
+
+test("V49: FFB incomplete OCR never masquerades as default 4 spades / Sud",{
+ timeout:90000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:812},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>!!window.BridgeFFBContract&&
+   !!document.getElementById("coach-level"),null,{timeout:45000});
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent("bridge:deal-imported",{
+   detail:{source:"ffb",contract:{declarer:"north"}}
+  })));
+  assert.equal(await page.locator("#coach-level").inputValue(),"");
+  assert.equal(await page.locator("#coach-strain").inputValue(),"");
+  assert.equal(await page.locator("#coach-seat").inputValue(),"north");
+  assert.match(await page.locator("#bridge-contract-ocr-hint").innerText(),/Complète les champs/);
+  await page.locator("#coach-start").click();
+  assert.match(await page.locator("#bridge-contract-error").innerText(),/Choisis un niveau/);
+  assert.equal(await page.locator("#bridge-step-contract").isVisible(),true);
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent("bridge:deal-imported",{
+   detail:{source:"ffb",contract:{level:1,strain:"S",declarer:"north"}}
+  })));
+  assert.equal(await page.locator("#coach-level").inputValue(),"1");
+  assert.equal(await page.locator("#coach-strain").inputValue(),"S");
+  assert.equal(await page.locator("#coach-seat").inputValue(),"north");
+  assert.match(await page.locator("#bridge-contract-ocr-hint").innerText(),/contrat 1♠/);
+  assert.equal(await page.locator("#bridge-contract-error").isVisible(),false);
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent("bridge:deal-imported",{
+   detail:{source:"ffb",contract:null}
+  })));
+  assert.equal(await page.locator("#coach-level").inputValue(),"");
+  assert.equal(await page.locator("#coach-strain").inputValue(),"");
+  assert.equal(await page.locator("#coach-seat").inputValue(),"");
+ }finally{await browser.close();}
+});
+test("V49: FFB OCR whitelist preserves Tesseract's @ alias for spades",()=>{
+ const fs=require("node:fs");
+ const s=fs.readFileSync("docs/ffb_import.js","utf8");
+ assert.match(s,/0123456789\+\-@♠♥♦♣/);
+ assert.match(fs.readFileSync("docs/ffb_contract.js","utf8"),/parseContractVisual/);
 });
