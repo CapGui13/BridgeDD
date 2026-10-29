@@ -219,6 +219,9 @@ test("iPhone geometry, optional 52-card review, and playable suit picker",{
     "No overflow at "+width+"px: "+JSON.stringify(responsive));
   }
   await page.setViewportSize({width:375,height:667});
+  // Retry scheduling the solve after the graphics/layout checks;
+  // headless Chromium's service-worker startup can be delayed.
+  await page.evaluate(()=>window.scheduleDealSolve?.());
   await page.waitForFunction(()=>window.playState?.pendingDiffs&&
    Object.keys(window.playState.pendingDiffs).length>0,null,{timeout:30000});
   const chosen=await page.evaluate(()=>{
@@ -254,8 +257,8 @@ test("user's screenshot deal: visible N/S card content centered on compass",{
   await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
    waitUntil:"domcontentloaded",timeout:40000
   });
-  await page.waitForFunction(()=>window.crossOriginIsolated&&
-   typeof window.startPlay==="function",null,{timeout:45000});
+  await waitIsolated(page,()=>window.crossOriginIsolated&&
+   typeof window.startPlay==="function");
   await page.evaluate(()=>{
    // Same 52 cards as the screenshot submitted on 28 Oct, without names.
    const deal=[
@@ -927,19 +930,17 @@ test("V49: real photo crop of board 28 visually resolves Tesseract's 1@ X-1 as 1
    const canvas=document.createElement("canvas");
    canvas.width=im.width;canvas.height=im.height;
    canvas.getContext("2d").drawImage(im,0,0);
-   return window.BridgeFFBContract.parseContractVisual("1@ X-1",canvas);
+   const C=window.BridgeFFBContract;
+   return {
+    recognized:C.parseContractVisual("1@ X-1",canvas),
+    withoutGlyph:C.parseContractVisual("1 X-1",canvas),
+    withoutLevel:C.parseContractVisual("X -1",canvas),
+    falseFour:C.parseContractVisual("4",canvas)
+   };
   });
-  assert.deepEqual(actual,{level:1,strain:"S"});
-  const dropped=await page.evaluate(async()=>{
-   const im=new Image();im.src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMIAAABOCAAAAABX+JZOAAABWElEQVR42u3ayRLCIBAE0GmK///l9uKSMibsMFidg4eUUR7TQ4IlaLsfwUQQQQRRBBBBBFEEEEEEf6WECuvgxn3rwKwNQGHV+dBgv0MDDz1Apie7BPiI+D9pTy+nxl1Ze8gIXn6sh9Kk4b68obaPkgwj/OPde2MrLNIeVE8Lb3aGW1fxu9ocJDgugrIvhfcRylD0HiDCQ1tUDKHXNMLjbZDyChfaitWcYoQtk9GYmP4MCMxU6zBVZOPQcGiWS3NPN6OgBjm8PFlqfN4GXXRu8EjFxw48yBfzPQBRPn5OS0YLFfLUKnuC7c2oVJMYIPAlsWFOxXhde2mz6ChNRc5zwCDStDLEoQzQzP1fB+/IffPt77Ny4knDxEyR2KWBgk8jbOqf5+XTm2H+qqC5sxts0e85YRoCo4ILjoBei/eSKIIIIIIogggggiiCCCCCKIIIIIIoiwyfEAboVHrXMe44IAAAAASUVORK5CYII=";await im.decode();
-   const canvas=document.createElement("canvas");canvas.width=im.width;canvas.height=im.height;
-   canvas.getContext("2d").drawImage(im,0,0);
-   return {withoutGlyph:window.BridgeFFBContract.parseContractVisual("1 X-1",canvas),
-    withoutLevel:window.BridgeFFBContract.parseContractVisual("X -1",canvas),
-    falseFour:window.BridgeFFBContract.parseContractVisual("4",canvas)};
-  });
-  assert.deepEqual(dropped.withoutGlyph,{level:1,strain:"S"});
-  assert.equal(dropped.withoutLevel,null);
-  assert.equal(dropped.falseFour,null);
+  assert.deepEqual(actual.recognized,{level:1,strain:"S"});
+  assert.deepEqual(actual.withoutGlyph,{level:1,strain:"S"});
+  assert.equal(actual.withoutLevel,null);
+  assert.equal(actual.falseFour,null);
  }finally{await browser.close();}
 });
