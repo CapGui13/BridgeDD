@@ -57,7 +57,9 @@ function locate(image,headers){
   const height=Math.min(Math.round(typical*range),h-y);
   return {x,y,w:width,h:height};
  };
- const contract=rect(.94,.63),declarer=rect(1.49,.48);
+ // The two text baselines are below the W/E headers; separate them
+ // from the lower percentage score. Calibrated on two real monitor photos.
+ const contract=rect(.72,.67),declarer=rect(1.22,.43);
  if(contract.h<16||declarer.h<16||contract.w<35)return null;
  return {contract,declarer};
 }
