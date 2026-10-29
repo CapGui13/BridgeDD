@@ -728,7 +728,8 @@ test("V45: FFB contract and declarer detected on photo preselect editable dropdo
   await page.evaluate(()=>window.dispatchEvent(new CustomEvent("bridge:deal-imported",{
    detail:{source:"ffb"}
   })));
-  assert.equal(await page.locator("#bridge-contract-ocr-hint").isVisible(),false);
+  assert.equal(await page.locator("#bridge-contract-ocr-hint").isVisible(),true);
+  assert.match(await page.locator("#bridge-contract-ocr-hint").innerText(),/Contrat non reconnu/);
  }finally{await browser.close();}
 });
 
