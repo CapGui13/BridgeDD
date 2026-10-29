@@ -91,14 +91,14 @@
 .ffb-diagram{
  display:grid;
  grid-template-columns:minmax(0,1fr) 36px minmax(0,1fr);
- grid-template-areas:". north ." "west compass east" ". south .";
+ grid-template-areas:"north north north" "west compass east" "south south south";
  gap:8px 3px;align-items:center;justify-content:center;
  max-width:590px;margin:0 auto 10px
 }
-.ffb-diagram-north{grid-area:north}
+.ffb-diagram-north{grid-area:north;justify-self:center;width:min(100%,220px)}
 .ffb-diagram-west{grid-area:west}
 .ffb-diagram-east{grid-area:east}
-.ffb-diagram-south{grid-area:south}
+.ffb-diagram-south{grid-area:south;justify-self:center;width:min(100%,220px)}
 .ffb-diagram-seat{
  background:#fbfcff;border:1px solid #c4d1e7;border-radius:10px;
  min-width:0;padding:7px 8px;box-shadow:0 2px 4px #234a7810
