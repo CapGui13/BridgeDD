@@ -152,9 +152,14 @@ function parseContractVisual(raw,canvas){
  const recognized=parseContract(raw);
  if(recognized)return recognized;
  const text=clean(raw).replace(/\s+/g," ");
- const tokens=[...text.matchAll(/(?:^|[^A-Z0-9])([1-7])\s*@(?=$|[^A-Z0-9@])/g)];
- if(tokens.length!==1||!looksLikeSpade(canvas))return null;
- return {level:Number(tokens[0][1]),strain:"S"};
+ const explicit=[...text.matchAll(/(?:^|[^A-Z0-9])([1-7])\s*@(?=$|[^A-Z0-9@])/g)];
+ // The engine may drop the unrecognized suit entirely, leaving
+ // '1 X-1'. Permit this only when the *photo's pixels independently*
+ // confirm a spade and the printed counter/result anchors the level.
+ const omitted=[...text.matchAll(/(?:^|[^A-Z0-9])([1-7])(?=\s+X\s*[-+]?\s*\d)/g)];
+ const levels=[...explicit,...omitted].map(m=>Number(m[1]));
+ if(levels.length!==1||!looksLikeSpade(canvas))return null;
+ return {level:levels[0],strain:"S"};
 }
 
 function locate(image,headers){

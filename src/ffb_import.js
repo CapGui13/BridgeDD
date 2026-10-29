@@ -625,7 +625,14 @@ async function readFFBContract(source,headers,worker,generation){
     // Low confidence is normal for pale gray "par Ouest" (sometimes
     // OCR confidence is 0 even when the word is visibly readable).
     // Parsing still requires an unambiguous French direction.
-    if(value&&(kind==="declarer"||
+    // A photograph-verified spade glyph may legitimately have a very
+    // low Tesseract confidence: the English OCR model doesn't know ♠.
+    // Never reject it by the generic confidence threshold; the visual
+    // verifier is stricter than the raw OCR guess.
+    const verifiedSymbol=kind==="contract"&&
+      value?.strain==="S"&&
+      !C.parseContract(answer.data?.text);
+    if(value&&(kind==="declarer"||verifiedSymbol||
        Number(answer.data?.confidence)>=18)){
      if(kind==="contract")contract=value;
      else declarer=value;
@@ -1209,7 +1216,7 @@ function init(){
  repaintForm();
  syncBoardControls();
 }
-window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V49"};
+window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V50"};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();

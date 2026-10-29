@@ -603,13 +603,13 @@ test("V40: grayscale OCR fallback preserves faint monitor characters and blue ba
 });
 
 
-test("V49: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
+test("V50: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
  const fs=require("node:fs");
  const index=fs.readFileSync("docs/index.html","utf8");
  const importScript=fs.readFileSync("docs/ffb_import.js","utf8");
- assert.ok(index.includes("ffb_import.js?v=contract-v49"));
- assert.ok(index.includes("coach.js?v=mobile-v49"));
- assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V49'));
+ assert.ok(index.includes("ffb_import.js?v=contract-v50"));
+ assert.ok(index.includes("coach.js?v=mobile-v50"));
+ assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V50'));
  assert.ok(importScript.includes("if(done%4===0)showProvisional"));
  assert.ok(importScript.includes("if(provisional.total>0)"));
 });
@@ -930,5 +930,16 @@ test("V49: real photo crop of board 28 visually resolves Tesseract's 1@ X-1 as 1
    return window.BridgeFFBContract.parseContractVisual("1@ X-1",canvas);
   });
   assert.deepEqual(actual,{level:1,strain:"S"});
+  const dropped=await page.evaluate(async()=>{
+   const im=new Image();im.src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMIAAABOCAAAAABX+JZOAAABWElEQVR42u3ayRLCIBAE0GmK///l9uKSMibsMFidg4eUUR7TQ4IlaLsfwUQQQQRRBBBBBFEEEEEEf6WECuvgxn3rwKwNQGHV+dBgv0MDDz1Apie7BPiI+D9pTy+nxl1Ze8gIXn6sh9Kk4b68obaPkgwj/OPde2MrLNIeVE8Lb3aGW1fxu9ocJDgugrIvhfcRylD0HiDCQ1tUDKHXNMLjbZDyChfaitWcYoQtk9GYmP4MCMxU6zBVZOPQcGiWS3NPN6OgBjm8PFlqfN4GXXRu8EjFxw48yBfzPQBRPn5OS0YLFfLUKnuC7c2oVJMYIPAlsWFOxXhde2mz6ChNRc5zwCDStDLEoQzQzP1fB+/IffPt77Ny4knDxEyR2KWBgk8jbOqf5+XTm2H+qqC5sxts0e85YRoCo4ILjoBei/eSKIIIIIIogggggiiCCCCCKIIIIIIoiwyfEAboVHrXMe44IAAAAASUVORK5CYII=";await im.decode();
+   const canvas=document.createElement("canvas");canvas.width=im.width;canvas.height=im.height;
+   canvas.getContext("2d").drawImage(im,0,0);
+   return {withoutGlyph:window.BridgeFFBContract.parseContractVisual("1 X-1",canvas),
+    withoutLevel:window.BridgeFFBContract.parseContractVisual("X -1",canvas),
+    falseFour:window.BridgeFFBContract.parseContractVisual("4",canvas)};
+  });
+  assert.deepEqual(dropped.withoutGlyph,{level:1,strain:"S"});
+  assert.equal(dropped.withoutLevel,null);
+  assert.equal(dropped.falseFour,null);
  }finally{await browser.close();}
 });

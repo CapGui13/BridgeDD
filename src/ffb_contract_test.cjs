@@ -57,6 +57,7 @@ test("V45: OCR crops occupy the centre of a photographed FFB table",()=>{
 test("V48: symbol OCR alias needs visual spade evidence",()=>{
  assert.equal(C.parseContract("1@ X-1"),null);
  assert.equal(C.parseContractVisual("1@ X-1",null),null);
+ assert.equal(C.parseContractVisual("1 X-1",null),null);
  assert.equal(C.parseContractVisual("93,13%",null),null);
  assert.deepEqual(C.parseContractVisual("2 SA +3",null),{level:2,strain:"N"});
 });
