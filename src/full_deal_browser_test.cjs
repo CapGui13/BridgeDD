@@ -802,10 +802,38 @@ test("V48: visually verified spade OCR from photograph-like canvas, not unknown 
     ctx.fillText("1"+suit+" X-1",35,137);
     return canvas;
    };
+   const boxes=canvas=>{
+    const w=canvas.width,h=canvas.height,
+     src=canvas.getContext("2d").getImageData(0,0,w,h).data,
+     mask=new Uint8Array(w*h),q=new Int32Array(w*h);
+    for(let i=0;i<w*h;i++)
+     if(.299*src[i*4]+.587*src[i*4+1]+.114*src[i*4+2]<105)mask[i]=1;
+    const results=[];
+    for(let start=0;start<mask.length;start++){
+     if(!mask[start])continue;
+     let head=0,tail=1,minX=w,minY=h,maxX=-1,maxY=-1;q[0]=start;mask[start]=0;
+     while(head<tail){
+      const i=q[head++],y=Math.floor(i/w),x=i-y*w;
+      minX=Math.min(x,minX);minY=Math.min(y,minY);
+      maxX=Math.max(x,maxX);maxY=Math.max(y,maxY);
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+       if(!dx&&!dy)continue;
+       const xx=x+dx,yy=y+dy;
+       if(xx<0||yy<0||xx>=w||yy>=h)continue;
+       const k=yy*w+xx;if(mask[k]){mask[k]=0;q[tail++]=k;}
+      }
+     }
+     const bw=maxX-minX+1,bh=maxY-minY+1;
+     if(tail>=35&&bh>=h*.19&&bw>=5)
+      results.push({x:minX,y:minY,w:bw,h:bh,area:tail});
+    }
+    return results.sort((a,b)=>a.x-b.x);
+   };
    return {spades:C.parseContractVisual("1@ X-1",make("♠")),
     clubs:C.parseContractVisual("1@ X-1",make("♣")),
     hearts:C.parseContractVisual("1@ X-1",make("♥")),
-    spadesNumerical:C.parseContractVisual("1@ X-1",make("5"))};
+    spadesNumerical:C.parseContractVisual("1@ X-1",make("5")),
+    shapeBoxes:boxes(make("♠")),clubBoxes:boxes(make("♣"))};
   });
   assert.deepEqual(result.spades,{level:1,strain:"S"},JSON.stringify(result));
   assert.equal(result.clubs,null,JSON.stringify(result));
