@@ -610,13 +610,13 @@ test("V40: grayscale OCR fallback preserves faint monitor characters and blue ba
 });
 
 
-test("V50: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
+test("V51: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
  const fs=require("node:fs");
  const index=fs.readFileSync("docs/index.html","utf8");
  const importScript=fs.readFileSync("docs/ffb_import.js","utf8");
- assert.ok(index.includes("ffb_import.js?v=contract-v50"));
- assert.ok(index.includes("coach.js?v=mobile-v50"));
- assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V50'));
+ assert.ok(index.includes("ffb_import.js?v=contract-v51"));
+ assert.ok(index.includes("coach.js?v=mobile-v51"));
+ assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V51'));
  assert.ok(importScript.includes("if(done%4===0)showProvisional"));
  assert.ok(importScript.includes("if(provisional.total>0)"));
 });
@@ -946,5 +946,48 @@ test("V49: real photo crop of board 28 visually resolves Tesseract's 1@ X-1 as 1
   assert.deepEqual(actual.withoutGlyph,{level:1,strain:"S"});
   assert.equal(actual.withoutLevel,null);
   assert.equal(actual.falseFour,null);
+ }finally{await browser.close();}
+});
+
+
+test("V51: visual spade + individually isolated OCR level as a fallback",{
+ timeout:90000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:812},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>!!window.BridgeFFBContract?.isolateSpadeLevel,
+   null,{timeout:45000});
+  const result=await page.evaluate(()=>{
+   const C=window.BridgeFFBContract;
+   const make=(text)=>{
+    const canvas=document.createElement("canvas");
+    canvas.width=480;canvas.height=180;
+    const ctx=canvas.getContext("2d");
+    ctx.fillStyle="white";ctx.fillRect(0,0,480,180);
+    ctx.fillStyle="#141414";ctx.font="bold 85px Arial, sans-serif";
+    ctx.fillText(text,45,120);
+    return canvas;
+   };
+   const one=C.isolateSpadeLevel(make("1♠ X -1"));
+   const wrong=C.isolateSpadeLevel(make("1♣ X -1"));
+   const noSymbol=C.isolateSpadeLevel(make("1 X -1"));
+   if(!one)return {found:false,wrong:!!wrong,noSymbol:!!noSymbol};
+   const ctx=one.getContext("2d");
+   const data=ctx.getImageData(0,0,one.width,one.height).data;
+   let ink=0;
+   for(let i=0;i<data.length;i+=4)
+    if(data[i]<105&&data[i+1]<105&&data[i+2]<105)ink++;
+   return {found:true,width:one.width,height:one.height,
+    ink,wrong:!!wrong,noSymbol:!!noSymbol};
+  });
+  assert.equal(result.found,true,JSON.stringify(result));
+  assert.ok(result.ink>200,JSON.stringify(result));
+  assert.equal(result.wrong,false,JSON.stringify(result));
+  assert.equal(result.noSymbol,false,JSON.stringify(result));
  }finally{await browser.close();}
 });

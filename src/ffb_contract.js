@@ -148,6 +148,59 @@ function looksLikeSpade(canvas){
  }
  return downward<=Math.max(2,Math.ceil(icon.h*.06));
 }
+
+/* Independent fallback when English Tesseract loses an FFB ♠ glyph.
+   Only run after a conservative visual spade confirmation, then isolate
+   the adjacent single level digit. The caller performs OCR on that digit
+   alone; no level is inferred from a score or "X -1". */
+function isolateSpadeLevel(canvas){
+ if(!looksLikeSpade(canvas))return null;
+ const w=canvas.width|0,h=canvas.height|0;
+ const context=canvas.getContext("2d",{willReadFrequently:true});
+ const rgba=context.getImageData(0,0,w,h).data;
+ const mask=new Uint8Array(w*h),queue=new Int32Array(w*h);
+ for(let i=0;i<mask.length;i++){
+  const j=i*4;
+  mask[i]=(.299*rgba[j]+.587*rgba[j+1]+.114*rgba[j+2])<105?1:0;
+ }
+ const pieces=[];
+ for(let start=0;start<mask.length;start++){
+  if(!mask[start])continue;
+  let head=0,tail=1,x0=w,y0=h,x1=-1,y1=-1;
+  queue[0]=start;mask[start]=0;
+  while(head<tail){
+   const i=queue[head++],y=Math.floor(i/w),x=i-y*w;
+   if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
+   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+    if(!dx&&!dy)continue;
+    const xx=x+dx,yy=y+dy;
+    if(xx<0||xx>=w||yy<0||yy>=h)continue;
+    const k=yy*w+xx;
+    if(mask[k]){mask[k]=0;queue[tail++]=k;}
+   }
+  }
+  const bw=x1-x0+1,bh=y1-y0+1;
+  if(tail>=35&&bh>=Math.max(12,h*.19)&&bw>=5)
+   pieces.push({x:x0,y:y0,w:bw,h:bh});
+ }
+ pieces.sort((a,b)=>a.x-b.x);
+ if(pieces.length<2)return null;
+ const digit=pieces[0],suit=pieces[1];
+ // Same linked components already validated by looksLikeSpade. Keep
+ // only the leftmost glyph, not the X or the negative trick count.
+ if(digit.x>=suit.x||digit.w>digit.h*1.1)return null;
+ const pad=Math.max(12,Math.round(digit.h*.45));
+ const side=Math.max(digit.w,digit.h)+pad*2;
+ const out=document.createElement("canvas");
+ out.width=side;out.height=side;
+ const ctx=out.getContext("2d");
+ ctx.fillStyle="white";ctx.fillRect(0,0,side,side);
+ ctx.drawImage(canvas,digit.x,digit.y,digit.w,digit.h,
+  Math.round((side-digit.w)/2),Math.round((side-digit.h)/2),
+  digit.w,digit.h);
+ return out;
+}
+
 function parseContractVisual(raw,canvas){
  const recognized=parseContract(raw);
  if(recognized)return recognized;
@@ -199,7 +252,7 @@ function locate(image,headers){
  if(contract.h<16||declarer.h<16||contract.w<35)return null;
  return {contract,contractTight,declarer,declarerTight};
 }
-const api={parseContract,parseContractVisual,looksLikeSpade,parseDeclarer,locate};
+const api={parseContract,parseContractVisual,looksLikeSpade,isolateSpadeLevel,parseDeclarer,locate};
 root.BridgeFFBContract=api;
 if(typeof module==="object"&&module.exports)module.exports=api;
 })(typeof globalThis!=="undefined"?globalThis:this);
