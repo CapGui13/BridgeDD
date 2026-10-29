@@ -187,7 +187,7 @@
     div.id="coach-toolbar";
     div.innerHTML=`<div class="coach-title"><strong>♠ <span>Bridge DD</span> ♥</strong><small>Analyse double dummy</small></div>
     <section id="bridge-step-photo" class="bridge-wizard-step">
-      <h2>Importer une donne <small id="bridge-app-version">V44</small></h2>
+      <h2>Importer une donne <small id="bridge-app-version">V45</small></h2>
       <p>Prends une photo du diagramme FFB ou sélectionne une image déjà enregistrée.</p>
       <div class="bridge-import-options" role="group" aria-label="Importer une donne FFB">
         <button id="bridge-upload-camera" type="button" class="coach-primary">📷 Prendre une photo</button>
@@ -204,6 +204,7 @@
         <label>Couleur<select id="coach-strain"><option value="S">♠</option><option value="H">♥</option><option value="D">♦</option><option value="C">♣</option><option value="N">SA</option></select></label>
         <label>Déclarant<select id="coach-seat"><option value="north">Nord</option><option value="east">Est</option><option value="south" selected>Sud</option><option value="west">Ouest</option></select></label>
       </div>
+      <p id="bridge-contract-ocr-hint" class="bridge-ocr-hint" hidden></p>
       <button id="coach-start" type="button" class="coach-primary">▶ Jouer et analyser</button>
       <button id="bridge-verify-deal" type="button" class="bridge-verify">Vérifier / corriger les 52 cartes</button>
       <button id="bridge-contract-newphoto" type="button" class="bridge-secondary">Choisir une autre image</button>
@@ -274,6 +275,27 @@
        ?"✓ 52 cartes validées, dont "+inferred.count+" déduite"+
         (inferred.count>1?"s":"")+" pour "+(seats[inferred.seat]||inferred.seat)+"."
        :"✓ Donne reconnue : 52 cartes.";
+      // Optional OCR preselection; never overwrite later manual changes.
+      const recognized=event.detail?.contract;
+      const level=Number(recognized?.level);
+      const validLevel=Number.isInteger(level)&&level>=1&&level<=7;
+      const validStrain=["S","H","D","C","N"].includes(recognized?.strain);
+      const validDeclarer=["north","east","south","west"].includes(recognized?.declarer);
+      if(validLevel&&validStrain){
+        $("coach-level").value=String(level);
+        $("coach-strain").value=recognized.strain;
+      }
+      if(validDeclarer)$("coach-seat").value=recognized.declarer;
+      const hint=$("bridge-contract-ocr-hint");
+      const values=[];
+      if(validLevel&&validStrain){
+        const label={S:"♠",H:"♥",D:"♦",C:"♣",N:"SA"}[recognized.strain];
+        values.push("contrat "+level+label);
+      }
+      if(validDeclarer)values.push("déclarant "+(seats[recognized.declarer]||recognized.declarer));
+      hint.hidden=!values.length;
+      hint.textContent=values.length
+       ?"Lu sur la photo : "+values.join(" · ")+". Modifiable ci-dessus.":"";
       $("bridge-contract-error").hidden=true;
       setStage("contract");
       update();
