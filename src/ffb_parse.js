@@ -114,7 +114,12 @@ function detectFFBHeaders(image){
   // Le vert d'un écran photographié est plus sombre (moiré, exposition),
   // contrairement au pixel vert uniforme d'une capture directe.
   const green=g>55&&g>r*1.27&&g>b*1.12&&r<155&&b<175;
-  const pink=r>245&&g>198&&g<245&&b>191&&b<243&&r-g>12&&Math.abs(g-b)<16;
+  // The pink FFB player banners can be photographed as muted salmon/
+  // brick colours, far below 245 red because the camera captures an LCD.
+  // Preserve the bright screenshot rule and add a hue-relative threshold
+  // for monitor photos (a neutral gray background should not qualify).
+  const pink=(r>245&&g>198&&g<245&&b>191&&b<243&&r-g>12&&Math.abs(g-b)<16)||
+   (r>80&&r-g>12&&r-b>18);
   pixel[i]=green?1:(pink?2:0);
  }
  const components=[];
@@ -178,11 +183,23 @@ function detectFFBHeaders(image){
  // Les photos d'écran sont plus petites dans le champ et peuvent avoir
  // une légère perspective : la seconde lecture OCR demande une vérification.
  const photo=width<w*.34;
+ // On a photographed green banner, the pale icon can split off the
+ // leftmost part of the green component. In that case its narrow bbox
+ // shifts the rank crop to the right and cuts the first honour.
+ // The west/east pair gives the real horizontal center and width.
+ const restoreBannerWidth=component=>{
+  if(!component||!photo||component.w>=width*.91)return component;
+  const center=component.x+component.w/2;
+  const expected=xMiddle+width/2;
+  if(Math.abs(center-expected)>width*.38)return component;
+  const x=Math.max(0,Math.min(w-width,Math.round(expected-width/2)));
+  return {...component,x,w:width};
+ };
  return [
-  {seat:"north",...(north||{x:xMiddle,y:yMiddle-offset,w:width,h:height,inferred:true}),photo},
+  {seat:"north",...(restoreBannerWidth(north)||{x:xMiddle,y:yMiddle-offset,w:width,h:height,inferred:true}),photo},
   {seat:"west",...west,photo},
   {seat:"east",...east,photo},
-  {seat:"south",...(south||{x:xMiddle,y:yMiddle+offset,w:width,h:height,inferred:true}),photo}
+  {seat:"south",...(restoreBannerWidth(south)||{x:xMiddle,y:yMiddle+offset,w:width,h:height,inferred:true}),photo}
  ];
 }
 function detectGreenHeaders(image){return detectFFBHeaders(image);}
