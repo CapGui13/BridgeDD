@@ -28,7 +28,7 @@ jobs:
             curl --fail --location --retry 3 --silent --show-error "https://dds-bridge.github.io/dds/$f" -o "docs/$f"
             test -s "docs/$f"
           done
-          cp src/coach.js src/coach.css src/classic.css src/classic.js src/ffb_parse.js src/ffb_fast.js src/ffb_import.js src/ffb_import.css src/coach_rules.js src/dd_matrix.js src/dd_matrix.css src/solve_health.js src/touch_cards.js src/ocr_reconcile.js src/ocr_photo_rank.js src/ffb_suit_locator.js src/ffb_board.js src/ffb_contract.js src/manifest.webmanifest src/icon.svg docs/
+          cp src/coach.js src/coach.css src/classic.css src/classic.js src/ffb_parse.js src/ffb_fast.js src/ffb_import.js src/ffb_import.css src/coach_rules.js src/dd_matrix.js src/dd_matrix.css src/solve_health.js src/touch_cards.js src/ocr_reconcile.js src/ocr_photo_rank.js src/ffb_suit_locator.js src/ffb_header_refine.js src/ffb_board.js src/ffb_contract.js src/manifest.webmanifest src/icon.svg docs/
           touch docs/.nojekyll
           # Dedicated iPhone home-screen icon and standard web app sizes.
           python3 -m venv /tmp/bridge-dd-icon-env
@@ -56,7 +56,7 @@ jobs:
           html=html.replace('<html lang="en">','<html lang="fr">')
           html=html.replace('<title>DDS Web — Double Dummy Solver</title>', '<title>Bridge DD · Jeu interactif</title>')
           html=html.replace('</head>','<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<meta name="theme-color" content="#304a94">\n<meta name="application-name" content="Bridge DD">\n<meta name="mobile-web-app-capable" content="yes">\n<meta name="apple-mobile-web-app-capable" content="yes">\n<meta name="apple-mobile-web-app-title" content="Bridge DD">\n<meta name="apple-mobile-web-app-status-bar-style" content="default">\n<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=pwa-v20">\n<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=pwa-v20">\n<link rel="manifest" href="manifest.webmanifest?v=pwa-v20">\n<link rel="stylesheet" href="coach.css?v=mobile-v45">\n<link rel="stylesheet" href="classic.css?v=visual-v24">\n<link rel="stylesheet" href="ffb_import.css?v=diagram-v44">\n<link rel="stylesheet" href="dd_matrix.css?v=reliable-v22">\n</head>')
-          html=html.replace('</body>','<script src="coach_rules.js?v=optimal-v14"></script>\n<script src="coach.js?v=mobile-v46"></script>\n<script src="classic.js?v=visual-v24"></script>\n<script src="ffb_parse.js?v=photo-v42"></script>\n<script src="ffb_fast.js?v=ffb-v3"></script>\n<script src="ocr_reconcile.js?v=order-v33"></script>\n<script src="ocr_photo_rank.js?v=photo-v37"></script>\n<script src="ffb_suit_locator.js?v=photo-v43"></script>\n<script src="ffb_board.js?v=board-v44"></script>\n<script src="ffb_contract.js?v=declarer-v46"></script>\n<script src="ffb_import.js?v=declarer-v46"></script>\n<script src="dd_matrix.js?v=reliable-v22"></script>\n<script src="solve_health.js?v=reliable-v22"></script>\n<script src="touch_cards.js?v=mobile-v23"></script>\n\n</body>')
+          html=html.replace('</body>','<script src="coach_rules.js?v=optimal-v14"></script>\n<script src="coach.js?v=mobile-v47"></script>\n<script src="classic.js?v=visual-v24"></script>\n<script src="ffb_parse.js?v=photo-v42"></script>\n<script src="ffb_fast.js?v=ffb-v3"></script>\n<script src="ocr_reconcile.js?v=order-v33"></script>\n<script src="ocr_photo_rank.js?v=photo-v37"></script>\n<script src="ffb_suit_locator.js?v=photo-v43"></script>\n<script src="ffb_header_refine.js?v=align-v47"></script>\n<script src="ffb_board.js?v=board-v44"></script>\n<script src="ffb_contract.js?v=declarer-v46"></script>\n<script src="ffb_import.js?v=align-v47"></script>\n<script src="dd_matrix.js?v=reliable-v22"></script>\n<script src="solve_health.js?v=reliable-v22"></script>\n<script src="touch_cards.js?v=mobile-v23"></script>\n\n</body>')
           Path("docs/index.html").write_text(html)
           PY
           node --test src/pwa_test.cjs
@@ -81,6 +81,8 @@ jobs:
           node --test src/ffb_board_test.cjs
           node --check docs/ffb_contract.js
           node --test src/ffb_contract_test.cjs
+          node --check docs/ffb_header_refine.js
+          node --test src/ffb_header_refine_test.cjs
           node --check docs/ffb_import.js
           node --test src/ffb_test.cjs
           grep -q 'classic.css' docs/index.html

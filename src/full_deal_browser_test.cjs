@@ -603,13 +603,13 @@ test("V40: grayscale OCR fallback preserves faint monitor characters and blue ba
 });
 
 
-test("V46: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
+test("V47: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
  const fs=require("node:fs");
  const index=fs.readFileSync("docs/index.html","utf8");
  const importScript=fs.readFileSync("docs/ffb_import.js","utf8");
- assert.ok(index.includes("ffb_import.js?v=declarer-v46"));
- assert.ok(index.includes("coach.js?v=mobile-v46"));
- assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V46'));
+ assert.ok(index.includes("ffb_import.js?v=align-v47"));
+ assert.ok(index.includes("coach.js?v=mobile-v47"));
+ assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V47'));
  assert.ok(importScript.includes("if(done%4===0)showProvisional"));
  assert.ok(importScript.includes("if(provisional.total>0)"));
 });
@@ -738,4 +738,44 @@ test("V46: FFB contract OCR uses single-word mode and never filters faint declar
  assert.ok(s.includes('tessedit_pageseg_mode:kind==="declarer"?"8":"7"'));
  assert.ok(s.includes('?["median","tight","binary"]'));
  assert.ok(s.includes('kind==="declarer"||'));
+});
+
+test("V47: align inferred south rows without moving detected green banners",{
+ timeout:90000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:812},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>!!window.BridgeFFBHeaderRefine?.refine&&
+   !!window.BridgeSuitLocator?.detect,null,{timeout:45000});
+  const result=await page.evaluate(()=>{
+   const h=[
+    {seat:"north",x:243,y:127,w:196,h:75,inferred:true},
+    {seat:"west",x:41,y:370,w:196,h:75},
+    {seat:"east",x:504,y:372,w:203,h:75},
+    {seat:"south",x:243,y:615,w:196,h:75,inferred:true}
+   ];
+   const anchor=[
+    {seat:"north",x:253,y:126,w:183,h:79},
+    {seat:"west",x:35,y:368,w:187,h:74},
+    {seat:"east",x:498,y:366,w:187,h:74},
+    {seat:"south",x:255,y:596,w:187,h:67}
+   ];
+   const ready=window.BridgeFFBHeaderRefine.refine(h,anchor);
+   const first=window.BridgeFFB.cropForRow(ready[3],0,768,1024);
+   const second=window.BridgeFFB.cropForRow(ready[3],1,768,1024);
+   return {refined:ready[3],first,second,
+    westOriginal:ready[1].y===h[1].y,
+    eastOriginal:ready[2].y===h[2].y};
+  });
+  assert.equal(result.refined.refinedBySuitMarkers,true);
+  assert.ok(result.first.y+result.first.h<710,JSON.stringify(result));
+  assert.ok(result.second.y<710&&result.second.y+result.second.h>724,JSON.stringify(result));
+  assert.equal(result.westOriginal,true);
+  assert.equal(result.eastOriginal,true);
+ }finally{await browser.close();}
 });
