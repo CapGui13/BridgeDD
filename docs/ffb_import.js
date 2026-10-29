@@ -10,7 +10,8 @@ const seatOrder=["north","west","east","south"];
 const suitOrder=["S","H","D","C"];
 let hands=P.empty(), busy=false, imageUrl=null;
 let reviewSnapshot=null,lastInferred=null,recognitionGeneration=0;
-let orderWarnings=[];
+let orderWarnings=[],diagramMode=false,metadataSnapshot=null;
+let boardInfo={number:null,dealer:"",vulnerability:""};
 const $=id=>document.getElementById(id);
 function setStatus(message){$("ffb-status").textContent=message;}
 function setBusy(value){
@@ -35,8 +36,11 @@ function closeDialog(){
  if(reviewSnapshot){
   hands=reviewSnapshot;
   reviewSnapshot=null;
+  if(metadataSnapshot)boardInfo=metadataSnapshot;
   repaintForm();
  }
+ metadataSnapshot=null;
+ setDiagramMode(false);
  // Conserver l'aperçu tant que l'on peut vérifier la donne importée.
 }
 function chooseAnotherPhoto(){
@@ -71,11 +75,84 @@ function openReview(){
  if(current)hands=current;
  if(!P.validate(hands).complete)return false;
  reviewSnapshot=JSON.parse(JSON.stringify(hands));
+ metadataSnapshot={...boardInfo};
  repaintForm();
- setStatus("Vérifie les cartes reconnues. Tu peux corriger une couleur, puis charger la donne.");
+ syncBoardControls();
+ setDiagramMode(true);
+ setStatus("Vérifie le diagramme. Tu peux modifier les cartes si nécessaire.");
  showDialog();
  return true;
 }
+// Read-only four-seat diagram; editing is an explicit separate mode.
+function renderDiagram(){
+ const area=$("ffb-diagram");
+ if(!area)return;
+ area.replaceChildren();
+ const meta=$("ffb-diagram-meta");
+ if(meta){
+  const number=boardInfo.number?"Donne n°"+boardInfo.number:"Donne n° —";
+  const dealer=window.BridgeFFBBoard?.labelDealer(boardInfo.dealer)||"Non renseigné";
+  const vulnerability=window.BridgeFFBBoard?.labelVulnerability(boardInfo.vulnerability)||"Non renseignée";
+  meta.textContent=number+"  ·  Donneur : "+dealer+
+   "  ·  Vulnérabilité : "+vulnerability;
+ }
+ for(const seat of seatOrder){
+  const box=document.createElement("section");
+  box.className="ffb-diagram-seat ffb-diagram-"+seat;
+  box.setAttribute("aria-label","Main de "+seatNames[seat]);
+  const title=document.createElement("strong");
+  title.className="ffb-diagram-seat-title";
+  title.textContent=seatNames[seat];
+  box.append(title);
+  for(const suit of suitOrder){
+   const line=document.createElement("div");
+   line.className="ffb-diagram-line";
+   const glyph=document.createElement("span");
+   glyph.className="ffb-diagram-suit "+((suit==="H"||suit==="D")?"red":"");
+   glyph.textContent=symbols[suit];
+   const value=document.createElement("span");
+   value.className="ffb-diagram-ranks";
+   const sorted=P.orderInfo(hands[seat][suit]).sorted;
+   value.textContent=sorted?P.toFrench(sorted):"—";
+   line.append(glyph,value);box.append(line);
+  }
+  area.append(box);
+ }
+ const compass=document.createElement("div");
+ compass.className="ffb-diagram-compass";
+ compass.setAttribute("aria-label","Nord en haut, Ouest à gauche, Est à droite et Sud en bas");
+ compass.textContent="N";
+ const middle=document.createElement("span");middle.textContent="O · E";
+ const bottom=document.createElement("span");bottom.textContent="S";
+ compass.append(middle,bottom);area.append(compass);
+}
+function syncBoardControls(){
+ const number=$("ffb-board-number");
+ if(!number)return;
+ number.value=boardInfo.number??"";
+ $("ffb-board-dealer").value=boardInfo.dealer;
+ $("ffb-board-vul").value=boardInfo.vulnerability;
+}
+function setDiagramMode(enabled){
+ diagramMode=!!enabled;
+ const view=$("ffb-diagram");
+ if(!view)return;
+ view.hidden=!diagramMode;
+ $("ffb-diagram-meta").hidden=!diagramMode;
+ $("ffb-hands").hidden=diagramMode;
+ $("ffb-meta-edit").hidden=diagramMode;
+ const button=$("ffb-switch-edit");
+ button.textContent=diagramMode?"✎ Modifier les cartes":"◈ Voir le diagramme";
+ button.setAttribute("aria-pressed",diagramMode?"false":"true");
+ updateValidation();
+}
+function applyDetectedBoard(result){
+ if(!result)return;
+ boardInfo={number:result.number,dealer:result.dealer,
+  vulnerability:result.vulnerability};
+ syncBoardControls();
+}
+
 function repaintForm(){
  const area=$("ffb-hands");
  area.replaceChildren();
@@ -138,17 +215,18 @@ function updateValidation(){
    .map(card=>P.toFrench(card[1]).trim());
   return pips.length?symbols[suit]+" "+pips.join(" · "):null;
  }).filter(Boolean);
- missing.hidden=!groups.length;
+ missing.hidden=diagramMode||!groups.length;
  missing.textContent=groups.length
    ?"Cartes manquantes selon la reconnaissance : "+groups.join("   |   ")
    :"";
  $("ffb-apply").disabled=busy||!v.complete;
+ if(diagramMode)renderDiagram();
  const incomplete=Object.keys(v.counts).filter(seat=>v.counts[seat]===12);
  const canFix=v.total===51&&v.missing.length===1&&
   !v.duplicates.length&&!v.unknown.length&&incomplete.length===1&&
   Object.values(v.counts).every(n=>n===12||n===13);
  const hint=$("ffb-complete");
- hint.hidden=!canFix;
+ hint.hidden=diagramMode||!canFix;
  if(canFix){
   const seat=incomplete[0],card=v.missing[0];
   hint.textContent="Proposer "+cardFr(card)+" à "+seatNames[seat];
@@ -477,6 +555,34 @@ function addScript(){
 function workerPath(part){
  return new URL("ocr/"+part,document.baseURI).href.replace(/\/$/,"");
 }
+// Read number in the top-left FFB board compass; a failure does not
+// invent dealer/vulnerability or interrupt any card recognition.
+async function readFFBBoardNumber(source,headers,worker,generation){
+ const rect=window.BridgeFFBBoard?.cropBoardNumber(source,headers);
+ if(!rect)return null;
+ try{
+  ensureCurrent(generation);
+  await worker.setParameters({
+   tessedit_char_whitelist:"0123456789",tessedit_pageseg_mode:"8"
+  });
+  const canvas=cropPhotoDenoised(source,rect);
+  const answer=await worker.recognize(canvas);
+  ensureCurrent(generation);
+  const raw=String(answer.data?.text||"").trim().replace(/\s+/g,"");
+  const confidence=Number(answer.data?.confidence)||0;
+  if(!/^[0-9]{1,2}$/.test(raw)||confidence<30)return null;
+  return window.BridgeFFBBoard.forBoard(Number(raw));
+ }catch(err){
+  ensureCurrent(generation);
+  return null;
+ }finally{
+  await worker.setParameters({
+   tessedit_char_whitelist:"ARDVJQKT0123456789",
+   tessedit_pageseg_mode:"7"
+  });
+ }
+}
+
 async function readFFB(source,headers,generation){
  ensureCurrent(generation);
  // Show provisional ranks as soon as we have them, rather than leaving
@@ -542,6 +648,10 @@ async function readFFB(source,headers,generation){
    tessedit_pageseg_mode:"7",
    preserve_interword_spaces:"1"
   });
+  if(window.BridgeFFBBoard){
+   const detected=await readFFBBoardNumber(source,headers,worker,generation);
+   applyDetectedBoard(detected);
+  }
   let done=0;
   for(const header of headers){
    for(let row=0;row<4;row++){
@@ -862,10 +972,12 @@ async function handleFile(file) {
  lastInferred=null;
  reviewSnapshot=null;
  orderWarnings=[];
+ boardInfo={number:null,dealer:"",vulnerability:""};
+ setDiagramMode(false);
+ syncBoardControls();
  if(imageUrl){URL.revokeObjectURL(imageUrl);imageUrl=null;}
  $("ffb-image-details").hidden=true;
  $("ffb-preview-image").removeAttribute("src");
- let importAutomatically=false;
  setBusy(true);showDialog();
  repaintForm();
  setStatus("V43 · Ouverture de l'image et détection des quatre joueurs…");
@@ -911,17 +1023,19 @@ async function handleFile(file) {
    setStatus(inferred.added.length+" carte(s) déduite(s) automatiquement pour "+seatNames[inferred.seat]+".");
   }
   repaintForm();
-  // Une donne strictement complète (13 par main, 52 cartes différentes,
-  // sans caractère inconnu) se charge sans confirmation supplémentaire.
-  // Dans tous les autres cas, conserver l'écran de correction.
-  importAutomatically=P.validate(hands).complete&&!reading.requiresReview;
-  if(reading.requiresReview||!importAutomatically){
-   const recognized=P.validate(hands).total;
-   setStatus(recognized===0
-    ?"4 joueurs détectés, mais aucune carte lue (0/52) : échec du moteur OCR, et non des bandeaux FFB."
-    :(recognized<52
-      ?"Lecture photo partielle : "+recognized+"/52 cartes détectées. Vérifie et corrige les couleurs ci-dessous."
-      :(reading.reason||"Vérifie les cartes avant de charger la donne.")));
+  const validation=P.validate(hands);
+  // V44: finished OCR always presents a diagram before choosing a contract.
+  // Partial OCR enters the existing correction form.
+  setDiagramMode(validation.complete);
+  if(validation.complete){
+   setStatus(reading.requiresReview
+    ?"52 cartes détectées : vérifie le diagramme et corrige si nécessaire."
+    :"52 cartes reconnues : vérifie le diagramme puis valide.");
+  }else{
+   const count=validation.total;
+   setStatus(count===0
+    ?"4 joueurs détectés, mais aucune carte lue (0/52) : échec de l'OCR."
+    :"Lecture incomplète : "+count+"/52 cartes. Modifie les cartes avant de continuer.");
   }
  }catch(err){
   if(generation===recognitionGeneration)
@@ -933,14 +1047,7 @@ async function handleFile(file) {
   }
  }
  if(generation!==recognitionGeneration)return;
- if(importAutomatically){
-  try{
-   applyDeal();
-  }catch(err){
-   showDialog();
-   setStatus("Chargement impossible : "+(err?.message||"erreur inconnue")+". La donne reste disponible pour vérification.");
-  }
- }
+ // User confirms the 52-card diagram explicitly below.
 }
 function applyDeal(){
  const v=P.validate(hands);
@@ -953,9 +1060,10 @@ function applyDeal(){
   suitOrder.map(suit=>P.normalize(canonical[seat][suit]).value).join("."));
  window.fillFormWithTestData(deal);
  reviewSnapshot=null; // Vérification confirmée : conserver les corrections.
+ metadataSnapshot=null;
  closeDialog();
  window.dispatchEvent(new CustomEvent("bridge:deal-imported",{
-  detail:{source:"ffb",inferred:lastInferred}
+  detail:{source:"ffb",inferred:lastInferred,board:{...boardInfo}}
  }));
  $("ffb-file").value="";
  $("ffb-camera-file").value="";
@@ -986,12 +1094,20 @@ function init(){
   <p id="ffb-status" role="status">Sélectionne une capture d'écran FFB.</p>
   <details id="ffb-image-details" hidden><summary>Voir la capture</summary>
    <img alt="Capture d'écran sélectionnée" id="ffb-preview-image"></details>
+  <div id="ffb-diagram-meta" class="ffb-diagram-meta" hidden></div>
+  <div id="ffb-diagram" class="ffb-diagram" hidden></div>
   <div id="ffb-hands" class="ffb-hands"></div>
+  <div id="ffb-meta-edit" class="ffb-meta-edit" hidden>
+   <label>Donne n° <input id="ffb-board-number" type="number" inputmode="numeric" min="1" max="99" placeholder="—"></label>
+   <label>Donneur <select id="ffb-board-dealer"><option value="">Non renseigné</option><option value="north">Nord</option><option value="east">Est</option><option value="south">Sud</option><option value="west">Ouest</option></select></label>
+   <label>Vulnérabilité <select id="ffb-board-vul"><option value="">Non renseignée</option><option value="none">Personne</option><option value="ns">Nord – Sud</option><option value="ew">Est – Ouest</option><option value="all">Tous</option></select></label>
+  </div>
   <p id="ffb-validation" class="ffb-validation"></p>
   <p id="ffb-missing" class="ffb-missing" hidden></p>
   <div class="ffb-buttons">
     <button type="button" id="ffb-complete" hidden></button>
-    <button type="button" id="ffb-apply" disabled>Charger la donne</button>
+    <button type="button" id="ffb-switch-edit">✎ Modifier les cartes</button>
+    <button type="button" id="ffb-apply" disabled>Valider et choisir le contrat</button>
   </div>
   <p class="ffb-privacy">Reconnaissance sur l'iPhone : aucune image envoyée à un serveur. Vérifie toujours les 52 cartes.</p>
  </div>`;
@@ -1001,9 +1117,24 @@ function init(){
  galleryInput.addEventListener("change",()=>handleFile(galleryInput.files?.[0]));
  cameraInput.addEventListener("change",()=>handleFile(cameraInput.files?.[0]));
  $("ffb-apply").addEventListener("click",applyDeal);
+ $("ffb-switch-edit").addEventListener("click",()=>setDiagramMode(!diagramMode));
+ $("ffb-board-number").addEventListener("input",()=>{
+  const next=window.BridgeFFBBoard?.forBoard($("ffb-board-number").value);
+  boardInfo=next
+   ?{number:next.number,dealer:next.dealer,vulnerability:next.vulnerability}
+   :{number:null,dealer:"",vulnerability:""};
+  syncBoardControls();
+ });
+ $("ffb-board-dealer").addEventListener("change",()=>{
+  boardInfo.dealer=$("ffb-board-dealer").value;
+ });
+ $("ffb-board-vul").addEventListener("change",()=>{
+  boardInfo.vulnerability=$("ffb-board-vul").value;
+ });
  repaintForm();
+ syncBoardControls();
 }
-window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V43"};
+window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V44"};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();
