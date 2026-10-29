@@ -615,7 +615,7 @@ test("V51: build marker and partial OCR progress remain available for iPhone dia
  const index=fs.readFileSync("docs/index.html","utf8");
  const importScript=fs.readFileSync("docs/ffb_import.js","utf8");
  assert.ok(index.includes("ffb_import.js?v=contract-v51"));
- assert.ok(index.includes("coach.js?v=mobile-v51"));
+ assert.ok(index.includes("coach.js?v=mobile-v52"));
  assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V51'));
  assert.ok(importScript.includes("if(done%4===0)showProvisional"));
  assert.ok(importScript.includes("if(provisional.total>0)"));
