@@ -187,7 +187,7 @@
     div.id="coach-toolbar";
     div.innerHTML=`<div class="coach-title"><strong>♠ <span>Bridge DD</span> ♥</strong><small>Analyse double dummy</small></div>
     <section id="bridge-step-photo" class="bridge-wizard-step">
-      <h2>Importer une donne <small id="bridge-app-version">V50</small></h2>
+      <h2>Importer une donne <small id="bridge-app-version">V51</small></h2>
       <p>Prends une photo du diagramme FFB ou sélectionne une image déjà enregistrée.</p>
       <div class="bridge-import-options" role="group" aria-label="Importer une donne FFB">
         <button id="bridge-upload-camera" type="button" class="coach-primary">📷 Prendre une photo</button>

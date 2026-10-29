@@ -640,6 +640,29 @@ async function readFFBContract(source,headers,worker,generation){
     }
    }
   }
+  // If a whole-line OCR pass drops the suit or the level, independently
+  // verify the printed spade shape and OCR ONLY its neighboring digit.
+  // This is not a special case for board 28 or any fixed contract.
+  if(!contract){
+   for(const rect of [regions.contractTight,regions.contract]){
+    if(!rect||rect.w<40||rect.h<20)continue;
+    ensureCurrent(generation);
+    const prepared=cropPhotoDenoised(source,rect);
+    const digitImage=C.isolateSpadeLevel?.(prepared);
+    if(!digitImage)continue;
+    await worker.setParameters({
+     tessedit_char_whitelist:"1234567",tessedit_pageseg_mode:"10"
+    });
+    const levelResult=await worker.recognize(digitImage);
+    ensureCurrent(generation);
+    const text=String(levelResult.data?.text||"").trim();
+    if(/^[1-7]$/.test(text)&&
+       Number(levelResult.data?.confidence)>=20){
+     contract={level:Number(text),strain:"S"};
+     break;
+    }
+   }
+  }
  }catch(err){
   ensureCurrent(generation);
   // Preselection is optional; a failure must not block card recognition.
@@ -1216,7 +1239,7 @@ function init(){
  repaintForm();
  syncBoardControls();
 }
-window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V50"};
+window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V51"};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();
