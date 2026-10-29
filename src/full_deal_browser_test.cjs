@@ -162,13 +162,19 @@ test("iPhone geometry, optional 52-card review, and playable suit picker",{
   assert.equal(await page.locator("#bridge-verify-deal").isVisible(),true);
   await page.locator("#bridge-verify-deal").click();
   assert.equal(await page.locator("#ffb-dialog").isVisible(),true);
+  assert.equal(await page.locator("#ffb-diagram").isVisible(),true,
+   "A valid deal first opens as a compass diagram");
   assert.match(await page.locator("#ffb-validation").innerText(),/Donne valide/);
+  await page.locator("#ffb-switch-edit").click();
+  assert.equal(await page.locator("#ffb-hands").isVisible(),true);
   const north=page.locator('#ffb-hands input[data-seat="north"][data-suit="S"]');
   const original=await north.inputValue();
   await north.fill(original.replace("A",""));
   assert.equal(await page.locator("#ffb-apply").isDisabled(),true);
   await page.locator("#ffb-close").click();
   await page.locator("#bridge-verify-deal").click();
+  assert.equal(await page.locator("#ffb-diagram").isVisible(),true);
+  await page.locator("#ffb-switch-edit").click();
   assert.equal(await page.locator('#ffb-hands input[data-seat="north"][data-suit="S"]').inputValue(),original,
    "Cancelling review must restore previous confirmed hand");
   await page.locator("#ffb-close").click();
@@ -597,13 +603,13 @@ test("V40: grayscale OCR fallback preserves faint monitor characters and blue ba
 });
 
 
-test("V43: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
+test("V44: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
  const fs=require("node:fs");
  const index=fs.readFileSync("docs/index.html","utf8");
  const importScript=fs.readFileSync("docs/ffb_import.js","utf8");
- assert.ok(index.includes("ffb_import.js?v=photo-v43"));
- assert.ok(index.includes("coach.js?v=mobile-v43"));
- assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V43'));
+ assert.ok(index.includes("ffb_import.js?v=diagram-v44"));
+ assert.ok(index.includes("coach.js?v=mobile-v44"));
+ assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V44'));
  assert.ok(importScript.includes("if(done%4===0)showProvisional"));
  assert.ok(importScript.includes("if(provisional.total>0)"));
 });
@@ -615,4 +621,74 @@ test("V43: real page integrates alternative paired-heart-diamond locator",()=>{
  const text=fs.readFileSync("docs/ffb_import.js","utf8");
  assert.ok(text.includes("window.BridgeSuitLocator?.detect(pixels)"));
  assert.ok(text.includes("repères FFB introuvables (bandeaux et symboles ♥♦)"));
+});
+
+
+test("V44: compass diagram positions, metadata edits and return to card review",{
+ timeout:90000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:812},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>!!window.BridgeFFBImport?.openReview&&
+   !!window.fillFormWithTestData,null,{timeout:45000});
+  await page.evaluate(()=>{
+   const P=window.BridgeFFB;
+   const deal=[
+    ["KJ2","T54","82","86543"],
+    ["Q9","KJ972","K9","QT72"],
+    ["8654","Q3","AQT63","AJ"],
+    ["AT73","A86","J754","K9"]
+   ].map(row=>row.map(s=>P.normalize(s).value).join("."));
+   window.fillFormWithTestData(deal);
+   window.dispatchEvent(new CustomEvent("bridge:deal-imported",
+    {detail:{source:"test"}}));
+  });
+  await page.locator("#bridge-verify-deal").click();
+  assert.equal(await page.locator("#ffb-diagram").isVisible(),true);
+  assert.equal(await page.locator("#ffb-hands").isVisible(),false);
+  assert.equal(await page.locator("#ffb-apply").isEnabled(),true);
+  const data=await page.evaluate(()=>{
+   const rect=s=>document.querySelector(s).getBoundingClientRect();
+   const n=rect(".ffb-diagram-north"),s=rect(".ffb-diagram-south");
+   const w=rect(".ffb-diagram-west"),e=rect(".ffb-diagram-east");
+   const d=rect("#ffb-diagram");
+   return {northCenter:n.x+n.width/2,southCenter:s.x+s.width/2,
+    diagramCenter:d.x+d.width/2,westRight:w.right,eastLeft:e.left,
+    scrollWidth:document.documentElement.scrollWidth,
+    viewport:window.innerWidth,
+    lineCount:document.querySelectorAll(".ffb-diagram-line").length,
+    metadata:document.querySelector("#ffb-diagram-meta").textContent};
+  });
+  assert.equal(data.lineCount,16);
+  assert.ok(Math.abs(data.northCenter-data.diagramCenter)<4,JSON.stringify(data));
+  assert.ok(Math.abs(data.southCenter-data.diagramCenter)<4,JSON.stringify(data));
+  assert.ok(data.westRight<data.eastLeft,JSON.stringify(data));
+  assert.ok(data.scrollWidth<=data.viewport+2,JSON.stringify(data));
+  assert.match(data.metadata,/Non renseigné/);
+  await page.locator("#ffb-switch-edit").click();
+  assert.equal(await page.locator("#ffb-hands").isVisible(),true);
+  await page.locator("#ffb-board-number").fill("6");
+  assert.equal(await page.locator("#ffb-board-dealer").inputValue(),"east");
+  assert.equal(await page.locator("#ffb-board-vul").inputValue(),"ew");
+  const north=page.locator('#ffb-hands input[data-seat="north"][data-suit="S"]');
+  const original=await north.inputValue();
+  await north.fill(original.slice(1));
+  assert.equal(await page.locator("#ffb-apply").isDisabled(),true);
+  await north.fill(original);
+  assert.equal(await page.locator("#ffb-apply").isEnabled(),true);
+  await page.locator("#ffb-switch-edit").click();
+  assert.equal(await page.locator("#ffb-diagram").isVisible(),true);
+  const metadata=await page.locator("#ffb-diagram-meta").innerText();
+  assert.match(metadata,/Donne n°6/);
+  assert.match(metadata,/Donneur : Est/);
+  assert.match(metadata,/Vulnérabilité : Est – Ouest/);
+  await page.locator("#ffb-apply").click();
+  assert.equal(await page.locator("#ffb-dialog").isVisible(),false);
+  assert.equal(await page.locator("#bridge-step-contract").isVisible(),true);
+ }finally{await browser.close();}
 });

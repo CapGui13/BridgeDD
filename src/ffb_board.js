@@ -16,7 +16,7 @@ function labelVulnerability(value){return vulLabels[value]||"Non renseignée";}
 function cropBoardNumber(image,headers){
  const w=image?.width|0,h=image?.height|0;
  const north=headers?.find(x=>x.seat==="north");
- if(!north||w<250||h<300||north.h<25)return null;
+ if(!north||north.y<0||w<250||h<300||north.h<25)return null;
  // Number appears inside the FFB dealer/board compass, to the
  // left of the North banner. Exclude red O/D, N and S labels.
  const x=Math.round(w*.079),right=Math.round(w*.155);
