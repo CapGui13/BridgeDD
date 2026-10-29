@@ -178,6 +178,10 @@ test("iPhone geometry, optional 52-card review, and playable suit picker",{
   assert.equal(await page.locator('#ffb-hands input[data-seat="north"][data-suit="S"]').inputValue(),original,
    "Cancelling review must restore previous confirmed hand");
   await page.locator("#ffb-close").click();
+  // V50 has no implicit contract: playing must be an explicit selection.
+  await page.locator("#coach-level").selectOption("4");
+  await page.locator("#coach-strain").selectOption("S");
+  await page.locator("#coach-seat").selectOption("south");
   await page.locator("#coach-start").click();
   const geom=await page.evaluate(()=>{
    const rect=s=>document.querySelector(s)?.getBoundingClientRect().toJSON();
