@@ -225,3 +225,11 @@ body.bridge-wizard #deck-status{display:none!important}
 .bridge-card-options .bridge-card-other{color:#080808}
 .bridge-card-help{font-size:12px;color:#60718a;margin:8px 0 0;text-align:center}
 body.bridge-card-picking{overflow:hidden}
+
+/* V45 — OCR-derived contract values are optional and always editable. */
+#bridge-contract-ocr-hint[hidden]{display:none!important}
+.bridge-ocr-hint{
+ background:#edf7f0;border:1px solid #bbddc5;border-radius:9px;
+ padding:8px 11px;color:#235f3c;font-size:13px;
+ line-height:1.45;margin:9px 0
+}

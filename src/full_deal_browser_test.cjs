@@ -603,13 +603,13 @@ test("V40: grayscale OCR fallback preserves faint monitor characters and blue ba
 });
 
 
-test("V44: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
+test("V45: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
  const fs=require("node:fs");
  const index=fs.readFileSync("docs/index.html","utf8");
  const importScript=fs.readFileSync("docs/ffb_import.js","utf8");
- assert.ok(index.includes("ffb_import.js?v=diagram-v44"));
- assert.ok(index.includes("coach.js?v=mobile-v44"));
- assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V44'));
+ assert.ok(index.includes("ffb_import.js?v=contract-v45"));
+ assert.ok(index.includes("coach.js?v=mobile-v45"));
+ assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V45'));
  assert.ok(importScript.includes("if(done%4===0)showProvisional"));
  assert.ok(importScript.includes("if(provisional.total>0)"));
 });
@@ -690,5 +690,44 @@ test("V44: compass diagram positions, metadata edits and return to card review",
   await page.locator("#ffb-apply").click();
   assert.equal(await page.locator("#ffb-dialog").isVisible(),false);
   assert.equal(await page.locator("#bridge-step-contract").isVisible(),true);
+ }finally{await browser.close();}
+});
+
+test("V45: FFB contract and declarer detected on photo preselect editable dropdowns",{
+ timeout:90000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:812},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>!!document.getElementById("coach-level")&&
+   !!window.BridgeFFBContract?.parseContract,null,{timeout:45000});
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent("bridge:deal-imported",{
+   detail:{source:"ffb",contract:{level:2,strain:"N",declarer:"west"}}
+  })));
+  assert.equal(await page.locator("#coach-level").inputValue(),"2");
+  assert.equal(await page.locator("#coach-strain").inputValue(),"N");
+  assert.equal(await page.locator("#coach-seat").inputValue(),"west");
+  assert.match(await page.locator("#bridge-contract-ocr-hint").innerText(),/Lu sur la photo : contrat 2SA · déclarant Ouest/);
+  await page.locator("#coach-level").selectOption("4");
+  await page.locator("#coach-strain").selectOption("H");
+  await page.locator("#coach-seat").selectOption("south");
+  assert.equal(await page.locator("#coach-level").inputValue(),"4");
+  assert.equal(await page.locator("#coach-strain").inputValue(),"H");
+  assert.equal(await page.locator("#coach-seat").inputValue(),"south");
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent("bridge:deal-imported",{
+   detail:{source:"ffb",contract:{level:3,strain:"S"}}
+  })));
+  assert.equal(await page.locator("#coach-level").inputValue(),"3");
+  assert.equal(await page.locator("#coach-strain").inputValue(),"S");
+  assert.equal(await page.locator("#coach-seat").inputValue(),"south",
+   "Unrecognized declarer must not be guessed or overwritten");
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent("bridge:deal-imported",{
+   detail:{source:"ffb"}
+  })));
+  assert.equal(await page.locator("#bridge-contract-ocr-hint").isVisible(),false);
  }finally{await browser.close();}
 });
