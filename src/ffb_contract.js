@@ -116,7 +116,7 @@ function looksLikeSpade(canvas){
  const digit=pieces[0],icon=pieces[1];
  if(icon.x-digit.x-digit.w>digit.h*.60||
     icon.w<icon.h*.62||icon.w>icon.h*1.4||
-    icon.h/digit.h<.68||icon.h/digit.h>1.8)return false;
+    icon.h/digit.h<.53||icon.h/digit.h>1.8)return false;
  const widths=new Uint16Array(icon.h);
  const startX=Math.max(0,icon.x),endX=Math.min(w,icon.x+icon.w);
  for(let y=0;y<icon.h;y++){
