@@ -606,16 +606,19 @@ async function readFFBContract(source,headers,worker,generation){
    });
    const variants=kind==="declarer"
     ?["median","tight","binary"]
-    :["median","binary"];
+    :["contractTight","median","binary"];
    for(const variant of variants){
     ensureCurrent(generation);
-    const rect=variant==="tight"?regions.declarerTight:regions[kind];
+    const rect=variant==="tight"?regions.declarerTight
+     :(variant==="contractTight"?regions.contractTight:regions[kind]);
     const image=variant==="binary"
      ?cropCanvas(source,rect,true,"boosted")
      :cropPhotoDenoised(source,rect);
     const answer=await worker.recognize(image);
     ensureCurrent(generation);
-    const value=parse(answer.data?.text);
+    const value=kind==="contract"
+     ?C.parseContractVisual(answer.data?.text,image)
+     :parse(answer.data?.text);
     // Low confidence is normal for pale gray "par Ouest" (sometimes
     // OCR confidence is 0 even when the word is visibly readable).
     // Parsing still requires an unambiguous French direction.
@@ -1203,7 +1206,7 @@ function init(){
  repaintForm();
  syncBoardControls();
 }
-window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V47"};
+window.BridgeFFBImport={openReview,trimPhotoInk,shiftCrop,cropCanvas,cropPhotoDenoised,version:"V48"};
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
 else init();
 })();
