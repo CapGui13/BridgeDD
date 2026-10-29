@@ -293,7 +293,7 @@ test("Wrong photo: choose another image, cancel, and abort slow OCR",{
    buffer:Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Rfs4AAAAASUVORK5CYII=","base64")};
   // iOS-like flow: the application's upload button opens a file chooser.
   const upload=page.waitForEvent("filechooser");
-  await page.locator("#bridge-upload").click();
+  await page.locator("#bridge-upload-gallery").click();
   await (await upload).setFiles(wrong);
   await page.locator("#ffb-status").getByText("Reconnaissance impossible",{exact:false}).waitFor({timeout:12000});
   assert.equal(await page.locator("#ffb-dialog").isVisible(),true);
@@ -304,7 +304,7 @@ test("Wrong photo: choose another image, cancel, and abort slow OCR",{
   await page.locator("#ffb-status").getByText("Reconnaissance impossible",{exact:false}).waitFor({timeout:12000});
   await page.locator("#ffb-close").click();
   assert.equal(await page.locator("#ffb-dialog").isVisible(),false);
-  assert.equal(await page.locator("#bridge-upload").isVisible(),true);
+  assert.equal(await page.locator("#bridge-upload-gallery").isVisible(),true);
   // Long OCR must never trap the user or reopen the dialog afterwards.
   await page.evaluate(()=>{
    window.BridgeFFB.detectFFBHeaders=()=>[
@@ -330,7 +330,7 @@ test("Wrong photo: choose another image, cancel, and abort slow OCR",{
   await page.waitForTimeout(300);
   assert.equal(await page.locator("#ffb-dialog").isVisible(),false,
    "Cancelled OCR must not reopen the correction window");
-  assert.equal(await page.locator("#bridge-upload").isVisible(),true);
+  assert.equal(await page.locator("#bridge-upload-gallery").isVisible(),true);
  }finally{await browser.close();}
 });
 
