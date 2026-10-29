@@ -723,8 +723,8 @@ test("V45: FFB contract and declarer detected on photo preselect editable dropdo
   })));
   assert.equal(await page.locator("#coach-level").inputValue(),"3");
   assert.equal(await page.locator("#coach-strain").inputValue(),"S");
-  assert.equal(await page.locator("#coach-seat").inputValue(),"south",
-   "Unrecognized declarer must not be guessed or overwritten");
+  assert.equal(await page.locator("#coach-seat").inputValue(),"",
+   "On a new FFB import, an unrecognized declarer must be explicitly chosen");
   await page.evaluate(()=>window.dispatchEvent(new CustomEvent("bridge:deal-imported",{
    detail:{source:"ffb"}
   })));
@@ -905,4 +905,29 @@ test("V49: FFB OCR whitelist preserves Tesseract's @ alias for spades",()=>{
  const s=fs.readFileSync("docs/ffb_import.js","utf8");
  assert.match(s,/0123456789\+\-@♠♥♦♣/);
  assert.match(fs.readFileSync("docs/ffb_contract.js","utf8"),/parseContractVisual/);
+});
+
+test("V49: real photo crop of board 28 visually resolves Tesseract's 1@ X-1 as 1♠",{
+ timeout:90000
+},async()=>{
+ const browser=await chromium.launch({headless:true,
+  executablePath:process.env.BRIDGE_BROWSER||undefined,
+  args:["--no-sandbox","--disable-dev-shm-usage"]});
+ try{
+  const page=await browser.newPage({viewport:{width:375,height:812},serviceWorkers:"allow"});
+  await page.goto(process.env.BRIDGE_URL||"http://127.0.0.1:8766",{
+   waitUntil:"domcontentloaded",timeout:40000});
+  await page.waitForFunction(()=>!!window.BridgeFFBContract?.parseContractVisual,null,{timeout:45000});
+  // Binary mask of JUST the 1♠ X-1 contract, cropped from the user-supplied
+  // photographed FFB table. No player names, card details, or score stored.
+  const actual=await page.evaluate(async()=>{
+   const raw="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMIAAABOCAAAAABX+JZOAAABWElEQVR42u3ayRLCIBAE0GmK///l9uKSMibsMFidg4eUUR7TQ4IlaLsfwUQQQQQRRBBBBBFEEEEEEf6WECuvgxn3rwKwNQGHV+dBgv0MDDz1Apie7BPiI+D9pTy+nxl1Ze8gIXn6sh9Kk4b68obaPkgwj/OPde2MrLNIeVE8Lb3aGW1fxu9ocJDgugrIvhfcRylD0HiDCQ1tUDKHXNMLjbJZDyChfaitWcYoQtk9GYmP4MCMxU6zBVZOPQcGiWS3NPN6OgBjm8PFlqfN4GXXRu8EjFxw48yBfzPQBRPn5OS0YLFfLUKnuC7c2oVJMYIPAlsWFOxXhde2mz6ChNRc5zwCDStDLEoQzQzP1fB+/IffPt77Ny4knDxEyR2KWBgk8jbOqf5+XTm2H+qqC5sxts0e85YRoCo4ILjoBei/eSKIIIIIIogggggiiCCCCCKIIIIIIoiwyfEAboVHrXMe44IAAAAASUVORK5CYII=";
+   const im=new Image();im.src=raw;await im.decode();
+   const canvas=document.createElement("canvas");
+   canvas.width=im.width;canvas.height=im.height;
+   canvas.getContext("2d").drawImage(im,0,0);
+   return window.BridgeFFBContract.parseContractVisual("1@ X-1",canvas);
+  });
+  assert.deepEqual(actual,{level:1,strain:"S"});
+ }finally{await browser.close();}
 });
