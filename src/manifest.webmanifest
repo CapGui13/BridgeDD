@@ -1,6 +1,6 @@
 {
-  "name": "Bridge DD – Analyse double dummy",
-  "short_name": "Bridge DD",
+  "name": "Bridge DDS – Analyse double dummy",
+  "short_name": "Bridge DDS",
   "description": "Importer une donne de bridge depuis une photo, analyser les cartes optimales et consulter le tableau double dummy.",
   "id": "/BridgeDD/",
   "start_url": "/BridgeDD/",
@@ -24,12 +24,6 @@
       "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
       "purpose": "any"
     }
   ]
