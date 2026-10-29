@@ -670,13 +670,13 @@ async function readFFB(source,headers,generation){
      }
      // A photograph may turn 9 into D (Queen). If its extra character
      // causes conflicts with another seat, read each rank individually.
-     const problemSuits=new Set([
+     const rankProblemSuits=new Set([
       ...(reconciled?.validation?.missing||[]).map(x=>x[0]),
       ...(reconciled?.validation?.duplicates||[]).map(x=>x[0]),
       ...(reconciled?.orderWarnings||[]).map(x=>x.suit)
      ]);
      const divergent=candidateRows.filter(entry=>
-      problemSuits.has(entry.suit)&&
+      rankProblemSuits.has(entry.suit)&&
       new Set(entry.options.map(opt=>opt.value)).size>1&&
       glyphRows.get(entry)?.parts.length>0&&
       glyphRows.get(entry).parts.length<=9);
