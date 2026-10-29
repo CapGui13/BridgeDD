@@ -132,3 +132,30 @@ test("An uncorrected OCR inversion is sorted but explicitly flagged for human re
  assert.equal(result.hands.south.C,"K9");
  assert.ok(result.orderWarnings.some(x=>x.seat==="south"&&x.suit==="C"));
 });
+
+test("V37: photographed deal recovers hidden badge, void lookalikes and misplaced queen",()=>{
+ const actual={
+  north:{S:"6",H:"A864",D:"JT7",C:"AQT72"},
+  west:{S:"AK",H:"J72",D:"8542",C:"J643"},
+  east:{S:"J87542",H:"Q53",D:"Q",C:"K95"},
+  south:{S:"QT93",H:"KT9",D:"AK963",C:"8"}
+ };
+ const original={
+  ...actual,
+  west:{...actual.west,H:""},
+  east:{...actual.east,D:""},
+  south:{...actual.south,D:"AKQ963",C:""}
+ };
+ const rows=P.seats.flatMap(seat=>P.suits.map(suit=>{
+  const before=original[seat][suit],after=actual[seat][suit];
+  return {seat,suit,options:before===after?
+   [{value:before,confidence:93}]:
+   [{value:before,confidence:80},{value:after,confidence:74}]};
+ }));
+ const before=P.validate(original);
+ assert.equal(before.complete,false);
+ const chosen=R.choose(rows,P);
+ assert.ok(chosen, "Must retain a coherent OCR candidate");
+ assert.equal(chosen.validation.complete,true,JSON.stringify(chosen.validation));
+ assert.equal(P.sameDistribution(chosen.hands,actual),true);
+});
