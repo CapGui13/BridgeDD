@@ -583,13 +583,22 @@ test("V40: grayscale OCR fallback preserves faint monitor characters and blue ba
 });
 
 
-test("V42: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
+test("V43: build marker and partial OCR progress remain available for iPhone diagnosis",()=>{
  const fs=require("node:fs");
  const index=fs.readFileSync("docs/index.html","utf8");
  const importScript=fs.readFileSync("docs/ffb_import.js","utf8");
- assert.ok(index.includes("ffb_import.js?v=photo-v42"));
- assert.ok(index.includes("coach.js?v=mobile-v42"));
- assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V42'));
+ assert.ok(index.includes("ffb_import.js?v=photo-v43"));
+ assert.ok(index.includes("coach.js?v=mobile-v43"));
+ assert.ok(fs.readFileSync("docs/coach.js","utf8").includes('id="bridge-app-version">V43'));
  assert.ok(importScript.includes("if(done%4===0)showProvisional"));
  assert.ok(importScript.includes("if(provisional.total>0)"));
+});
+
+test("V43: real page integrates alternative paired-heart-diamond locator",()=>{
+ const fs=require("node:fs");
+ const html=fs.readFileSync("docs/index.html","utf8");
+ assert.ok(html.includes("ffb_suit_locator.js?v=photo-v43"));
+ const text=fs.readFileSync("docs/ffb_import.js","utf8");
+ assert.ok(text.includes("window.BridgeSuitLocator?.detect(pixels)"));
+ assert.ok(text.includes("repères FFB introuvables (bandeaux et symboles ♥♦)"));
 });
