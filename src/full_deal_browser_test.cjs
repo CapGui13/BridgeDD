@@ -833,7 +833,27 @@ test("V48: visually verified spade OCR from photograph-like canvas, not unknown 
     clubs:C.parseContractVisual("1@ X-1",make("♣")),
     hearts:C.parseContractVisual("1@ X-1",make("♥")),
     spadesNumerical:C.parseContractVisual("1@ X-1",make("5")),
-    shapeBoxes:boxes(make("♠")),clubBoxes:boxes(make("♣"))};
+    shapeBoxes:boxes(make("♠")),clubBoxes:boxes(make("♣")),
+    metrics:["♠","♣","♥","♦"].map(char=>{
+     const canvas=make(char),ctx=canvas.getContext("2d"),img=ctx.getImageData(0,0,canvas.width,canvas.height).data,
+     all=boxes(canvas),g=all[1],widths=[];
+     if(!g)return {char,all};
+     for(let y=0;y<g.h;y++){
+      let count=0;
+      for(let x=g.x;x<g.x+g.w;x++){
+       const j=((g.y+y)*canvas.width+x)*4;
+       if(.299*img[j]+.587*img[j+1]+.114*img[j+2]<105)count++;
+      }
+      widths.push(count);
+     }
+     const avg=(lo,hi)=>{
+      const start=Math.floor(g.h*lo),end=Math.max(start+1,Math.floor(g.h*hi));
+      return +(widths.slice(start,end).reduce((a,b)=>a+b,0)/(end-start)).toFixed(2);
+     };
+     return {char,top:avg(0,.12),middle:avg(.41,.63),stem:avg(.83,.96),
+      decreases:widths.slice(2,Math.floor(g.h*.50)).filter((v,i)=>widths[i+3]<v-Math.max(2,g.w*.03)).length,
+      ratio:g.h/all[0].h};
+    })};
   });
   assert.deepEqual(result.spades,{level:1,strain:"S"},JSON.stringify(result));
   assert.equal(result.clubs,null,JSON.stringify(result));
